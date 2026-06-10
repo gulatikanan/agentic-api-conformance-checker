@@ -12,15 +12,19 @@ name = "agentic-api-conformance-checker"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "httpx" },
     { name = "mcp" },
     { name = "pandas" },
+    { name = "python-dotenv" },
     { name = "qdrant-client" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "mcp", specifier = ">=1.27.2" },
     { name = "pandas", specifier = ">=3.0.3" },
+    { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "qdrant-client", specifier = ">=1.18.0" },
 ]
 
