@@ -1,41 +1,51 @@
 # Agentic API Conformance Checker
 
-The Agentic API Conformance Checker is an intelligent, automated testing framework designed to analyze, ingest, and verify API implementations against their specifications. By leveraging agentic AI workflows, semantic search, and vector databases, it automatically checks conformance, identifies discrepancies, and ensures robust compliance with API standards.
+The Agentic API Conformance Checker is an intelligent, automated testing framework designed to analyze, ingest, and verify API implementations against formal specifications. By leveraging agentic AI workflows, semantic search, and vector databases, it automatically identifies discrepancies and ensures compliance with industry API standards.
 
-## Overview
-This tool performs deep conformance checking on API endpoints by analyzing their behavior and comparing them to formal specifications. It uses an AI-driven agent to construct test scenarios, generate test requests, execute them, and evaluate the responses against the expected schemas and business logic.
+## Project Progress & Milestones
+
+- [x] **Infrastructure Setup**: Initialized environment, AWS EC2, Docker (Qdrant & PostgreSQL).
+- [x] **Decoupled Architecture**: Implemented `llm_client.py` with Groq API integration (Llama 3.3).
+- [ ] **Phase 4: Corpus Ingestion**: Downloading and indexing OWASP/Zalando guidelines.
+- [ ] **Phase 5: Schema Migration**: Configuring PostgreSQL findings and check tables.
+- [ ] **Phase 6: Agent Logic**: Developing MCP tool-calling capabilities.
 
 ## Stack
-- **AI/LLM**: Ollama (for local LLM and embedding generation)
-- **Vector DB**: Qdrant (for semantic indexing and retrieval of API specs)
-- **Relational DB**: PostgreSQL (for storing test logs, results, and system state)
-- **Server Protocol**: Model Context Protocol (MCP) server for tool access
+- **AI/LLM**: Groq (Llama 3.3 70B for high-speed inference)
+- **Vector DB**: Qdrant (Semantic indexing of API rules)
+- **Relational DB**: PostgreSQL (Storing test logs, findings, and system state)
+- **Server Protocol**: Model Context Protocol (MCP) for tool interaction
 - **Containerization**: Docker & Docker Compose
 
 ## Setup
-1. Copy `.env.example` to `.env` and configure the environment variables:
+1. Copy `.env.example` to `.env` and configure your credentials:
    ```bash
    cp .env.example .env
    ```
+   *Required*: `LLM_PROVIDER`, `LLM_API_KEY` (Groq), and DB connection strings.
+
 2. Start the database and vector store services:
    ```bash
    docker compose up -d
    ```
-3. Run the setup script to initialize dependencies:
+
+3. Install dependencies using uv:
    ```bash
-   bash scripts/setup.sh
+   uv sync
    ```
 
 ## Ingestion
-To ingest new API specifications or documentation:
-1. Place raw spec files (OpenAPI/Swagger, etc.) into the `corpus/raw/` directory.
-2. Run the ingestion script:
+To ingest API specifications and guidelines (OWASP/Zalando):
+
+1. Place raw markdown/html files into `corpus/raw/`.
+2. Execute the ingestion workflow:
    ```bash
-   bash scripts/ingest.sh
+   bash corpus/download.sh
+   # (Followed by vectorization scripts)
    ```
 
-## Redeploy
-To restart the services or apply updates:
-```bash
-bash scripts/restart.sh
-```
+## Architecture
+This project utilizes a decoupled LLM client strategy, allowing for seamless provider switching (e.g., Groq to Gemini) without modifying core agent logic. All reasoning passes through `llm_client.py`, ensuring consistent error handling and token management.
+
+## License
+MIT
