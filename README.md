@@ -82,9 +82,17 @@ uv run test_brain.py
 .
 ├── corpus/                 # Compliance guidelines and raw text documents
 │   └── raw/                # Targeted ingestion home for OWASP/Zalando definitions
-├── llm_client.py           # Vendor-agnostic decoupled LLM processing gateway
-├── test_brain.py           # Automated cloud system verification file
-├── docker-compose.yml      # Service engine definitions (PostgreSQL + Qdrant)
-├── pyproject.toml          # Structured environment build configurations
-└── .gitignore              # Production environment credential filters
+├── docs/                   # Project design documentation and assignment specifications
+├── qdrant/                 # Vector store volume persistence and configurations
+├── scripts/                # Operational scripts (setup, restart, ingestion)
+├── src/                    # Core codebase for the agent and tool definitions
+├── .env.example            # Blueprint for environment variables (not committed)
+├── .gitignore              # Protects secrets (.env) and caches from reaching GitHub
+├── .python-version         # Pinpoints the exact Python runtime version for uv
+├── docker-compose.yml      # Defines database containers (PostgreSQL + Qdrant)
+├── llm_client.py           # Decoupled interface for the Groq inference engine
+├── main.py                 # Primary entrypoint for application execution
+├── pyproject.toml          # Project configuration and package requirements
+├── README.md               # Current documentation, roadmap, and quick-start guide
+└── uv.lock                 # Deterministic locked dependency graph for reproducibility
 ```
