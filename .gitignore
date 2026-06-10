@@ -1,0 +1,9 @@
+.env
+node_modules/
+__pycache__/
+.venv/
+*.env.local
+qdrant/storage/*
+!qdrant/storage/.gitkeep
+postgres/data/*
+!postgres/data/.gitkeep
