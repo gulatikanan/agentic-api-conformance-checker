@@ -19,7 +19,7 @@ While the system is natively designed to integrate open-weight models, we route 
 - [x] **System Integration: Decoupled LLM Gateway**
   - Engineered a production-ready `llm_client.py` client using standard environment configuration.
   - Integrated Groq cloud engine utilizing the optimized `llama-3.3-70b-versatile` model.
-  - Executed automated sanity checks (`test_brain.py`) ensuring zero leaks and validated upstream network access.
+  - Validated upstream network access and interface connectivity directly through the module.
 - [ ] **Phase 4: Corpus — Download and Verify** 🔄 *[Next Step]*
   - Execute automated shell utilities (`corpus/download.sh`) to retrieve raw policy markdown and HTML components (OWASP ASVS, OWASP API Top 10, and Zalando Guidelines).
   - Verify data ingestion limits via line-count profiling (`wc -l`).
@@ -70,9 +70,9 @@ uv sync
 ```
 
 ### 4. Core Connectivity Validation
-Run the diagnostic harness script to assert communication with the inference cloud:
+Assert live communication with the Groq inference cloud inline using an on-the-fly execution command (no test files required):
 ```bash
-uv run test_brain.py
+uv run python -c "from llm_client import AgentBrain; print('Brain Response:', AgentBrain().generate('Say connection verified'))"
 ```
 
 ---
