@@ -21,7 +21,7 @@ for f in \
   0xa7-server-side-request-forgery \
   0xa8-security-misconfiguration \
   0xa9-improper-inventory-management \
-  0xa10-unsafe-consumption-of-apis; do
+  0xaa-unsafe-consumption-of-apis; do
   echo "  Downloading $f.md..."
   curl -fsSL "$BASE/$f.md" -o "corpus/raw/owasp-api-$f.md"
 done
