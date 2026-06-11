@@ -124,5 +124,61 @@ def inspect_artifact(content: str, artifact_type: str = "openapi") -> str:
         })
 
 
+@mcp.tool()
+def save_conformance_check(artifact_name: str, summary_json: str, findings_json: str) -> str:
+    """
+    Saves the finalized API conformance check metrics and granular cited findings 
+    directly into the persistent relational PostgreSQL database.
+    """
+    try:
+        import psycopg2
+        db_url = os.getenv("POSTGRES_URL", "postgresql://postgres:postgrespassword@localhost:5432/conformance_checker")
+        conn = psycopg2.connect(db_url)
+        
+        with conn.cursor() as cur:
+            # 1. Initialize data tables if missing
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS compliance_checks (
+                    id SERIAL PRIMARY KEY,
+                    artifact_name VARCHAR(255) NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    summary JSONB
+                );
+            """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS check_findings (
+                    id SERIAL PRIMARY KEY,
+                    check_id INTEGER REFERENCES compliance_checks(id) ON DELETE CASCADE,
+                    rule_title VARCHAR(255),
+                    verdict VARCHAR(50),
+                    score NUMERIC(5,4),
+                    details TEXT,
+                    rule_passage TEXT
+                );
+            """)
+            
+            # 2. Insert master session tracking entry
+            cur.execute(
+                "INSERT INTO compliance_checks (artifact_name, summary) VALUES (%s, %s) RETURNING id;",
+                (artifact_name, summary_json)
+            )
+            check_id = cur.fetchone()[0]
+            
+            # 3. Insert individual cited rule logs
+            findings = json.loads(findings_json)
+            for f in findings:
+                cur.execute("""
+                    INSERT INTO check_findings (check_id, rule_title, verdict, score, details, rule_passage)
+                    VALUES (%s, %s, %s, %s, %s, %s);
+                """, (check_id, f.get("rule_title"), f.get("verdict"), f.get("score"), f.get("details"), f.get("rule_passage")))
+                
+            conn.commit()
+            conn.close()
+            
+        return json.dumps({"status": "success", "check_id": check_id, "message": "Telemetry logged to Postgres successfully."})
+    except Exception as e:
+        return json.dumps({"status": "error", "reason": f"Database persistence failure: {str(e)}"})
+
+
 if __name__ == "__main__":
     mcp.run()
