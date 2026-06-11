@@ -1,14 +1,12 @@
-# System Architecture
+# System Architecture - Agentic API Conformance Checker
 
 This document describes the high-level architecture, primary data flows, components, and key design decisions of the Agentic API Conformance Checker.
 
----
-
 ## 1. High-Level System Diagram
 
-Below is an ASCII representation of the core components and their interactions:
+Below is the architectural mapping of the core components and their protocol interactions:
 
-```
+```plaintext
                   +-----------------------------------------------+
                   |                  Frontend                     |
                   |       (Next.js + shadcn/ui on Vercel)         |
@@ -27,7 +25,7 @@ Below is an ASCII representation of the core components and their interactions:
              3. Find      v                               |
                 Rules   +---------------------------------+-------+
                         |               MCP Server                |
-                        |             (Node.js on EC2)            |
+                        |            (Python / FastMCP)           |
                         +---+-------------------------+-----------+
                             |                         |
                  Vector DB  |                         | Parse
@@ -38,9 +36,10 @@ Below is an ASCII representation of the core components and their interactions:
                             |
                  Requires   |
                  Embeddings v
-                 +----------+----------+
-                 |    Ollama Cloud     |
-                 +---------------------+
+                 +----------+----------+        +-----------------+
+                 |  Local Transformer  |        |    Groq Cloud   |
+                 | (all-MiniLM-L6-v2)  |        |    (Inference)  |
+                 +---------------------+        +-----------------+
 
        ================== DOCKER COMPOSE INFRASTRUCTURE ==================
        =  Both services run on a shared network ('backend-network')      =
@@ -50,106 +49,78 @@ Below is an ASCII representation of the core components and their interactions:
        =   |    (Vector Store)     |           |     (Relational)    |   =
        =   +-----------------------+           +---------------------+   =
        ===================================================================
-
 ```
-
----
 
 ## 2. Primary Flows
 
 ### 2.1. Ingestion Flow
-The ingestion flow is responsible for preparing and loading the security and compliance guidelines into the vector database.
+The ingestion flow is responsible for preparing, chunking, and seeding the security and compliance guidelines into the vector database.
 
+```plaintext
++--------------+     +-------------+     +--------------------+     +-------------+
+| Corpus Files | --> |   Chunker   | --> | Local Embeddings   | --> |  Qdrant DB  |
+| (OWASP, etc) |     | (Markdown)  |     | (all-MiniLM-L6-v2) |     | (Vector-DB) |
++--------------+     +-------------+     +--------------------+     +-------------+
 ```
-+--------------+     +-------------+     +-------------------+     +-------------+
-| Corpus Files | --> |   Chunker   | --> | Ollama Embeddings | --> |  Qdrant DB  |
-| (OWASP, etc) |     | (Markdown)  |     | (nomic-embed-text)|     | (Vector-DB) |
-+--------------+     +-------------+     +-------------------+     +-------------+
-```
 
-1. **Corpus Source**: Markdown and YAML guideline files (OWASP ASVS, OWASP API Top 10, Zalando REST Guidelines) are read from `corpus/raw/`.
-2. **Chunker**: Files are parsed and split into logical, semantic chunks (paragraphs, headings, or rules).
-3. **Embedding Generation**: Chunks are sent to the Ollama API using the `nomic-embed-text` model to generate 768-dimensional vector representations.
-4. **Vector Storage**: The resulting embeddings, along with the raw text payload, rule metadata, and identifiers, are written to a Qdrant collection.
-
----
+- **Corpus Source**: Markdown, CSV, and AsciiDoc guideline files (OWASP ASVS 4.0.3, OWASP API Top 10, Zalando REST Guidelines) are pulled natively from `corpus/raw/`.
+- **Chunker**: Files are parsed and split into 414 highly granular, semantic chunks to preserve contextual metadata.
+- **Embedding Generation**: Vectors are computed locally on the host CPU using the native Python `sentence-transformers` framework running the `all-MiniLM-L6-v2` topology (generating highly efficient 384-dimensional dense vectors).
+- **Vector Storage**: The resulting vector matrices, along with raw payload strings and contextual titles, are written over gRPC directly into the Qdrant `compliance_rules` collection.
 
 ### 2.2. Conformance Check Flow
-The check flow executes when a developer submits an API specification for verification.
+The verification execution pipeline operates in a live loop when an API specification asset is submitted.
 
-1. **Submission**: The developer uploads an API artifact (JSON/YAML spec or Markdown) through the Next.js frontend.
-2. **Parsing & Analysis Initiation**: The frontend triggers a background run inside the OpenClaw agent and stores a record of the request in the PostgreSQL `checks` table.
-3. **Artifact Inspection**: The OpenClaw agent invokes the MCP server's `inspect_artifact` tool. The MCP server parses the API spec structure (paths, parameters, authentication) and returns a structured summary to the agent.
-4. **Rule Matching**: The OpenClaw agent identifies key design and security concepts (e.g. rate-limiting, SQL Injection points, JWT authorization) and invokes the MCP server's `find_rules` tool for each concept.
-5. **RAG Retrieval**: The MCP server queries the Qdrant database using vectors generated from the query text. Qdrant returns matching rule passages and similarity scores.
-6. **Verdict Formulation**: The agent reviews the retrieved rules against the parsed spec content using the Ollama LLM:
-   - For each checked item, the agent assigns a verdict (`Pass`, `Fail`, `Warn`, or `Abstain`).
-   - If vector search scores are below the similarity threshold, it yields `Abstain` with a placeholder description.
-7. **Report & Persistence**: The agent compiles the results into a findings report and writes the outcomes to the PostgreSQL `findings` table.
-8. **Visualization**: The frontend reads the database records and displays the report alongside the **Rule-Retrieval Inspector Panel**, showing similarity scores and citations.
-
----
+1. **Submission**: The user uploads an API artifact (OpenAPI JSON/YAML spec) through the Next.js frontend web interface.
+2. **Orchestration Lifecycle**: The frontend initiates a live analysis process inside the OpenClaw agent container and instantiates a state record inside the PostgreSQL tracking table.
+3. **Artifact Inspection**: The OpenClaw agent invokes the MCP server's `inspect_artifact` tool boundary to flatten the endpoint schemas, parameters, and structural design signatures.
+4. **Rule Matching**: The agent identifies structural security topics and requests compliance context by calling the MCP server's `find_rules` tool.
+5. **RAG Retrieval**: The MCP server computes vector dimensions of the search query locally, runs a Cosine distance lookup against Qdrant, and relays matching clauses and similarity scores back across the protocol boundary to OpenClaw.
+6. **Verdict Formulation**: The OpenClaw engine weighs the custom system instructions (`SOUL.md`) alongside the rules using the cloud-routed Groq API (`llama-3.3-70b-versatile`).
+7. **Report Persistence**: The agent compiles audit assertions into a structured findings object, writes outcomes to the PostgreSQL relational database, and flushes real-time logging arrays straight to the web interface.
 
 ## 3. Component Descriptions
 
 ### 3.1. Frontend
-- **Technology Stack**: Next.js (App Router), Tailwind CSS, and shadcn/ui.
-- **Hosting**: Deployed on Vercel.
-- **Responsibilities**:
-  - Provides drag-and-drop file upload.
-  - Renders visual status badges for conformance runs.
-  - Houses the **Rule-Retrieval Inspector Panel** which displays retrieval context and cosine similarity scores.
+- **Technology Stack**: Next.js (App Router), Tailwind CSS, shadcn/ui.
+- **Hosting**: Vercel.
+- **Responsibilities**: Renders visual file interfaces and houses the **Rule-Retrieval Inspector Panel** to expose real-time similarity metrics and exact clause citations transparently.
 
-### 3.2. Agent (OpenClaw)
-- **Technology Stack**: Python-based OpenClaw framework.
-- **Hosting**: AWS EC2 instance (t3.micro).
-- **Responsibilities**:
-  - Orchestrates reasoning loops.
-  - Queries rules and inspects schemas exclusively through MCP tool boundaries.
-  - Performs LLM evaluation on rule compliance.
+### 3.2. Agent (OpenClaw Engine)
+- **Technology Stack**: OpenClaw platform orchestration framework.
+- **Hosting**: AWS EC2 Virtual Machine (t3.micro).
+- **Responsibilities**: Holds behavioral rules (`IDENTITY.md`, `SOUL.md`), manages reasoning contexts, and makes final compliance evaluations without ever possessing direct access to database configurations or raw data blocks.
 
 ### 3.3. Model Context Protocol (MCP) Server
-- **Technology Stack**: Node.js / TypeScript.
-- **Hosting**: Colocated on the EC2 instance, running as a persistent daemon.
+- **Technology Stack**: Python / FastMCP.
+- **Hosting**: Colocated natively within the EC2 application runtime layer.
 - **Exposed Tools**:
-  - `inspect_artifact(content, type)`: Standardizes various API formats (YAML/JSON/Markdown) into a unified abstract syntax tree representation for the agent.
-  - `find_rules(topic)`: Handles vector queries to Qdrant, abstracting embedding generation and vector lookup.
+  - `inspect_artifact(content, type)`: Standardizes various API formats into a unified abstract syntax tree representation for the agent.
+  - `find_rules(topic)`: Abstracts vector lookups, computing local embeddings on the fly and querying the Qdrant instance.
 
 ### 3.4. Vector Store (Qdrant)
-- **Technology Stack**: Qdrant Vector Database.
-- **Hosting**: Self-hosted Docker container on AWS EC2, port `6333` (HTTP) and `6334` (gRPC).
-- **Storage**: Mapped volume to `./qdrant/storage` on host for persistence.
+- **Technology Stack**: Qdrant Vector Database engine running inside an isolated Docker container.
+- **Storage**: Mapped to a local host directory volume (`./qdrant/storage/`) to ensure persistence.
 
-### 3.5. Embeddings & LLM (Ollama)
-- **Models Used**:
-  - Embedding: `nomic-embed-text`
-  - LLM Reasoning: `llama3` or `mistral`
-- **Hosting**: Ollama Cloud / Local Ollama instance.
-- **Resilience**: Integrated retry + exponential backoff logic is applied at the client layer to handle Ollama API rate limits and connection resets.
+### 3.5. Embeddings & Inference Brain
+- **Embedding Matrix**: Local host computation running `all-MiniLM-L6-v2`.
+- **LLM Reasoning Brain**: Groq Cloud API Gateway executing `llama-3.3-70b-versatile` processing loops.
 
-### 3.6. Database (PostgreSQL)
-- **Technology Stack**: PostgreSQL 15.
-- **Hosting**: Self-hosted Docker container on AWS EC2, port `5432`.
-- **Storage**: Mapped volume to `./postgres/data` on host.
-- **Responsibilities**: Stores persistent logs of conformance checks, detailed findings, and retrieval metadata.
-
----
+### 3.6. Relational Database (PostgreSQL)
+- **Technology Stack**: PostgreSQL 15 running inside an isolated Docker container.
+- **Storage**: Persistent host mapping directory (`./postgres/data/`).
+- **Responsibilities**: Tracks session run metrics, metadata indexes, and audit logs.
 
 ## 4. Key Architectural Decisions
 
 ### 4.1. Strict Tool Boundaries (MCP-Only Access)
-* **Decision**: The OpenClaw agent has no direct filesystem access, database drivers, or direct HTTP clients for Qdrant. It is decoupled entirely behind Model Context Protocol (MCP).
-* **Rationale**: Decoupling the agent from DB drivers and indexing protocols keeps the agent lightweight and secure. Tool implementation changes (e.g. migrating from Qdrant to PGVector) require zero updates to the core agent logic.
+The OpenClaw agent has zero direct interaction or drivers connected to the underlying databases or vector engines. By forcing all interaction through the Model Context Protocol (MCP), the agent stays decoupled from infrastructure specifications.
 
-### 4.2. Abstention Logic Threshold
-* **Decision**: Any retrieval result returning a cosine similarity score below `0.70` (configurable) triggers an automatic `Abstain` verdict.
-* **Rationale**: Prevents LLM hallucinations. If the vector space cannot find a matching regulatory or design passage, the agent must decline to verify and flag it for manual review by a human security engineer.
+### 4.2. Low-Resource Optimization (Swap Space Resiliency)
+To prevent Out-Of-Memory (OOM) kernel crashes during vector extraction on limited hardware allocations, a 2GB Virtual Memory Swap File is configured on the host server disk. This absorbs high execution compilation spikes securely.
 
-### 4.3. Retry and Backoff Strategy
-* **Decision**: All outbound Ollama API requests must implement jittered exponential backoff retrying up to 5 times.
-* **Rationale**: Ollama execution (especially on CPU or shared instances) is highly susceptible to context congestion and transient connection drops.
-
----
+### 4.3. Abstention Logic Threshold
+Any retrieval results producing similarity scores below a `0.70` threshold force an automatic `Abstain` verdict. This restricts the LLM from inventing or guessing policy constraints, defaulting the asset directly to a human reviewer flags state.
 
 ## 5. Data Models
 
@@ -172,8 +143,8 @@ Stores individual compliance findings linked to a parent check.
 | `id` | `UUID` (PK) | Unique finding entry identifier. |
 | `check_id` | `UUID` (FK) | Reference to `checks.id`. |
 | `verdict` | `VARCHAR` | Verdict outcome (`pass`, `fail`, `warn`, `abstain`). |
-| `cited_rule` | `VARCHAR` | Reference guideline key/rule ID. |
+| `cited_rule` | `VARCHAR` | Reference guideline key / rule ID. |
 | `rule_passage` | `TEXT` | Exact text retrieved from the guideline corpus. |
-| `similarity_score`| `REAL` | Vector search similarity score returned by Qdrant. |
+| `similarity_score` | `REAL` | Vector search similarity score returned by Qdrant. |
 | `reasoning` | `TEXT` | Detailed textual explanation of the verdict. |
-| `retrieved_passages`| `JSONB` | Array of alternative passages evaluated, with their similarity scores. |
+| `retrieved_passages` | `JSONB` | Array of alternative passages evaluated, with their similarity scores. |
