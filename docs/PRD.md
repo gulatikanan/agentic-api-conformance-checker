@@ -1,100 +1,100 @@
 # Product Requirements Document (PRD)
-Project Title: Agentic API Conformance Checker
-Version: 1.1 (Aligned with Groq + Python FastMCP Infrastructure)
+
+## Project Title: Agentic API Conformance Checker
+**Version:** 1.2 (Aligned with OpenClaw Core, Google Gemini, and FastMCP Infrastructure)
+
+---
 
 ## 1. Problem Statement
-Modern software development heavily relies on APIs, which must conform to security, design, and performance standards. However, manually verifying API specifications (OpenAPI, Swagger, custom JSON/YAML schemas, or Markdown files) against industry-standard guidelines is labor-intensive, error-prone, and slow. Developers need a way to automatically and intelligently verify their API definitions against guidelines like OWASP ASVS, OWASP API Top 10, and Zalando REST Guidelines to catch flaws before code is deployed.
 
-## 2. Goals and Non-Goals
+Modern software development heavily relies on APIs, which must conform to strict security, design, and performance standards. However, manually verifying API specifications (OpenAPI, Swagger, custom JSON/YAML schemas, or Markdown files) against industry‑standard guidelines is labor‑intensive, error‑prone, and slow.
+
+Developers and security engineers need an automated, intelligent way to evaluate their API design definitions against complex regulatory frameworks like OWASP ASVS, OWASP API Top 10, and Zalando REST Guidelines to discover structural design flaws and vulnerabilities before code ever hits production.
+
+---
+
+## 2. Goals and Non‑Goals
+
 ### Goals
-- Provide an automated, intelligent (agent-driven) conformance checking pipeline for API specifications.
-- Leverage Retrieval-Augmented Generation (RAG) to dynamically map submitted API designs to relevant sections of industry-standard security and design guidelines.
-- Offer actionable feedback with precise citations (rule passages) and verdicts (Pass, Fail, Warn, Abstain).
-- Persist test execution history for audits and team visibility.
-- Include a transparency panel (Rule-Retrieval Inspector) in the frontend for developers to see exactly why an operational decision was reached.
+- Provide an automated, agent‑driven conformance‑checking pipeline for uploaded API specifications.
+- Leverage Retrieval‑Augmented Generation (RAG) to dynamically extract and cross‑reference submitted API designs against sections of security and compliance guideline books.
+- Offer granular, actionable audit feedback with exact verbatim citations and structural verdicts (`PASS`, `FAIL`, `ABSTAIN`).
+- Persist complete test execution histories and metrics natively in a relational database for auditing and team dashboard tracking.
+- Eliminate model guessing and hallucinations by implementing an exact mathematical similarity‑threshold boundary mechanism.
 
-### Non-Goals
-- Real-time active scanning/fuzzing of live API endpoints in production (v1 is focused purely on specification and design-level conformance checking).
-- Auto-fixing or refactoring the API specs directly in the source repository (the system only reports findings).
-- General-purpose LLM chat interface unrelated to API conformance checking.
+### Non‑Goals
+- Real‑time active dynamic fuzzing or network‑level scanning of live API endpoints in production (the platform focuses strictly on design and specification‑level security compliance checks).
+- Automated code refactoring or rewriting of the specification files directly in source control (the framework reports findings but does not alter source files).
+- Multi‑turn conversational chat interfaces unrelated to explicit compliance validation.
+
+---
 
 ## 3. Target Users
-- **Backend Developers**: Want quick verification that their proposed API spec complies with company and security policies.
-- **Security Engineers / Auditors**: Want to verify that third-party or internal API specifications do not violate security principles (e.g., OWASP API Top 10) before approval.
-- **API Architects**: Wish to ensure consistent design guidelines (e.g., Zalando REST Guidelines) across various teams.
+- **Backend Developers:** Want rapid verification that their proposed API routes conform to organizational security policies before opening pull requests.
+- **Security Engineers & Auditors:** Need to verify that internal or third‑party vendor API schemas do not violate structural safety foundations before authorizing deployments.
+- **API Architects:** Wish to guarantee design uniformity (e.g., standard path formatting, encrypted parameter structures) across multiple distributed product teams.
+
+---
 
 ## 4. Core Features
-### 4.1. Artifact Submission
-Users can submit API artifacts (OpenAPI specs, JSON schemas, YAML files, or Markdown documentation) via a drag-and-drop or text area input in the frontend interface.
 
-### 4.2. Agentic Inspection via MCP
-The agent utilizes the Model Context Protocol (MCP) tool `inspect_artifact` to parse, dissect, and build an abstract semantic understanding of the uploaded specification.
+### 4.1. Asset Submission Interface
+Users can submit API specification artifacts (OpenAPI JSON/YAML objects or text‑based Markdown route documentation) via the web‑based frontend application interface.
 
-### 4.3. RAG-Based Rule Retrieval
-The agent queries the vector database using the MCP `find_rules` tool to search for rules and guidelines relevant to the API design. The lookup runs across local embedded collections of OWASP ASVS 4.0.3, OWASP API Top 10, and Zalando REST Guidelines.
+### 4.2. Declarative Prompt Configuration Matrix
+The agent’s cognitive persona and operational constraints are managed via a clean, declarative text system using individual markdown documents read natively by the execution core:
+- **IDENTITY.md:** Establishes the elite security compliance auditor persona.
+- **SOUL.md:** Implements rigid operational guardrails, watches for specific flaws (BOLA, unencrypted parameters), and defines the similarity fallback boundaries.
+- **AGENTS.md:** Outlines the sequential orchestration loop mapping (Extract → Retrieve → Evaluate → Save).
 
-### 4.4. Findings Report & Verdicts
-The agent compiles a comprehensive findings report. Each finding must include:
-- **Verdict**: Pass, Fail, Warn, or Abstain.
-- **Cited Rule**: The rule name or ID (e.g., OWASP API1:2023 Broken Object Level Authorization).
-- **Rule Passage**: The exact text segment retrieved from the reference guidelines.
-- **Abstention Constraint**: If no rule in the database is applicable to the endpoint or pattern under review, the agent must output an `Abstain` verdict with the explanation: `"no rule found — flagged for human review"`.
+### 4.3. Dynamic MCP Tool Discovery Layer
+The system couples the reasoning brain to local host infrastructure tools using the Model Context Protocol (MCP) driven by a standard Python FastMCP server communicating over standard I/O pipes.
 
-### 4.5. Rule-Retrieval Inspector Panel
-An inspector interface in the frontend display that shows the retrieved rule passages, reference details, and the exact cosine similarity scores computed by the vector database for each finding.
+### 4.4. Algorithmic Abstention Gate
+The system enforces a hard **0.45** Cosine Similarity safety rail. If a vector search query against the knowledge base fails to produce any compliance rules with a score greater than or equal to **0.45**, the system blocks the LLM from inventing policies and mandates a strict **ABSTAIN** verdict with the reason: `no rule found — flagged for human review`.
 
-### 4.6. Persistent Storage
-All conformance checks, metadata, findings, verdicts, retrieved rule passages, and similarity scores are stored in a PostgreSQL database for historical access and analysis.
+### 4.5. Telemetry Tracking & Relational Storage
+All execution metrics, overall file summary stats, and endpoint‑level findings are captured natively via relational SQL storage configurations to power long‑term analytics dashboards.
+
+### 4.6. DevSecOps One‑Click Automation
+The workspace implements a structured Bash automation suite inside the `scripts/` folder to enable seamless environment synchronization and database lifecycle caching:
+- **setup.sh:** Builds databases and syncs Python dependencies via `uv`.
+- **ingest.sh:** Re‑calculates local rule text vectors and populates the database.
+- **restart.sh:** Frees orphaned network process blocks and cycles the background system daemons.
+
+---
 
 ## 5. Functional Requirements (FR)
-- **FR-1: Upload and Validation**
-  - The system must accept YAML, JSON, and Markdown formats up to 2MB in size.
-  - The frontend must validate that the submitted text or file is not empty before initiating the check.
-- **FR-2: MCP Artifact Parser**
-  - The Python-based MCP server must expose an `inspect_artifact(content, type)` tool.
-  - The tool must parse the schema to identify endpoints, request/response structures, authorization methods, and parameters.
-- **FR-3: MCP Rule Matcher**
-  - The Python-based MCP server must expose a `find_rules(topic)` tool.
-  - The tool must query Qdrant to retrieve the top $K$ rule passages related to the topic, automatically computing 384-dimensional dense vectors on the fly using local `all-MiniLM-L6-v2` matrices.
-- **FR-4: Agent Decision-Making Loop**
-  - The OpenClaw agent must coordinate the workflow:
-    - Invoke `inspect_artifact` on the submission.
-    - Identify candidate rule topics (e.g., "rate limiting", "ID format", "authentication").
-    - Invoke `find_rules` for each topic.
-    - Compare the specification structure against the retrieved rules.
-    - Generate the verdict, reasoning, and cited passage.
-- **FR-5: Abstention Threshold**
-  - If the vector search returns similarity scores below a configurable threshold (e.g., 0.70), the agent must classify the rule check as an `Abstain` rather than hallucinating a compliance rule.
-- **FR-6: Findings Persistency**
-  - The system must save each check with a unique UUID in PostgreSQL.
-  - The findings table must store `check_id`, `verdict`, `rule_citation`, `rule_passage`, and `similarity_score` in a relational layout containing JSONB arrays for alternative evaluations.
-- **FR-7: Frontend Results Display**
-  - The user interface must present a dashboard card for each finding, color-coded by verdict (Green for Pass, Red for Fail, Yellow for Warn, Grey for Abstain).
-  - An expandable "Inspector Panel" must display the raw retrieval results from the vector store and the exact vector similarity scores.
 
-## 6. Non-Functional Requirements (NFR)
-- **NFR-1: Service Longevity**
-  - The deployment must be stable enough to remain live and responsive for at least 7 consecutive days without intervention or manual restarts.
-- **NFR-2: Cost Efficiency & Resource Resilience**
-  - The application stack must run within free-tier bounds or open-source local services.
-  - Reasoning workloads must be routed through the Groq API Cloud Gateway using the optimized, free-credit model `llama-3.3-70b-versatile`.
-  - Ingestion and local embedding computation must execute on the host CPU. To guarantee absolute runtime stability within a 1GB hardware memory ceiling, the host VPS must be provisioned with a 20GB EBS Volume and an active 2GB Linux Swap Space file to prevent Out-Of-Memory (OOM) termination.
-- **NFR-3: Quick Redeploy and Re-Ingest**
-  - Setup, deployment, and ingestion of the reference corpus must be fully scriptable and complete in ~10 minutes or less on a fresh AWS EC2 instance.
-- **NFR-4: Error Resilience**
-  - The system must implement retry-on-rate-limit logic using jittered exponential backoff for the Groq API gateway to handle upstream network throttling gracefully.
+- **FR‑1:** Upload Handling & Content Validation – The system must accept raw input text string objects up to **2 MB** in size and validate that submissions are structurally populated before dispatching requests to the background orchestration loops.
+- **FR‑2:** FastMCP Structure Parsing Engine (`inspect_artifact`) – Must ingest raw specification content strings, evaluate syntax patterns, and discover paths, routes, parameters, and active authentication protocols.
+- **FR‑3:** FastMCP Vector RAG Matcher (`find_rules`) – Must compute local embeddings using **all‑MiniLM‑L6‑v2** (384‑dimensional), execute cosine‑similarity lookups across the seeded `compliance_rules` collection, and filter out results below the global **0.45** threshold.
+- **FR‑4:** Agent Orchestration Execution Loop – OpenClaw daemon (`openclaw.service`) must coordinate the flow: extract via `inspect_artifact` → map to semantic search blocks → query RAG via `find_rules` → pass context to Google Gemini (`gemini-1.5-pro`, temperature 0.1) → compute verdicts → store via `save_conformance_check`.
+- **FR‑5:** Robust Data Ingestion and Normalization – `save_conformance_check` must implement defensive parsing; if the reasoning core updates output payload formats, the ingestion loop must intercept and normalize variations (e.g., cross‑mapping `endpoint` to `rule_title`, `reason` to `details`) to guarantee that database cells never receive broken NULL keys.
+
+---
+
+## 6. Non‑Functional Requirements (NFR)
+
+- **NFR‑1:** Service Continuity & Longevity – Background OpenClaw daemon and container dependencies must remain live, responsive, and leak‑free for a minimum of **7 days** of deployment without human intervention or server restarts.
+- **NFR‑2:** Efficient Resource Footprint – Prioritize highly scalable open‑source modules over costly cloud endpoints where possible. Vector extractions and text chunking loops must run locally on the host CPU. Deploy on a **20 GB** EBS volume with a **2 GB** Linux Swap file to prevent OOM termination.
+- **NFR‑3:** Quick Redeployment Bounds – Complete infrastructure setup, dependency compilation via `uv`, and dense embedding parsing of the full **414‑chunk** compliance corpus must execute in **≤ 5 minutes** on a fresh host using the automation scripts.
+
+---
 
 ## 7. Out of Scope for v1
-- Integration with CI/CD systems (GitHub Actions, GitLab CI) as a blocking gate check.
-- Automated remediation or rewriting of the specification code.
-- Interactive multi-turn chat with the agent regarding the findings (results are static once generated).
-- Custom guideline ingestion via the frontend UI (ingestion remains dedicated to backend scripts).
+- Live integration into automated CI/CD pipeline blocking gates (e.g., active GitHub Actions blocker checks).
+- Direct automated write‑back corrections to alter specification source code files natively inside active user repositories.
+- Multi‑user, multi‑tenant access control logic or organization‑space separations inside the database models.
 
-## 8. Success Metrics
+---
 
-| Metric | Target Boundary | Implementation Validation |
-| :--- | :--- | :--- |
-| **Ingestion Efficiency** | $\le$ 5 minutes | Complete parsing and vector initialization of all 414 chunks. |
-| **Checker Latency** | $\le$ 20 seconds | Full conformance check and report delivery via Groq cloud execution speeds. |
-| **Citation Accuracy** | 100% | Zero hallucination of citations; all findings link to real vector entries or yield an Abstain verdict. |
-| **Script Automation** | 100% Success | Unattended execution of deployment parameters on standard Ubuntu environments. |
+## 8. Performance & Success Metrics
+
+| Evaluation Metric                     | Target Threshold | Boundary Validation Method |
+|--------------------------------------|------------------|----------------------------|
+| **Ingestion Pipeline Efficiency**    | ≤ 5 minutes      | Measure total parsing, embedding generation, and vector seeding time via `ingest.sh`.
+| **Audit Execution Latency**          | ≤ 20 seconds     | End‑to‑end conformance check timing from upload to report generation.
+| **Data Contract Ingestion Accuracy** | 100 %            | Verify that database tables receive fully populated rows with no broken NULL values.
+| **Citation Soundness**               | 100 %            | Ensure every PASS/FAIL finding links to a verbatim guideline string; otherwise, ABSTAIN.
+| **Deployment Automation Success**    | 100 %            | Unattended execution of deployment scripts across identical Ubuntu targets.

@@ -24,27 +24,27 @@ embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
 @mcp.tool()
 def find_rules(topic: str) -> str:
     """
-    Queries the Qdrant vector database using local semantic search embeddings 
+    Queries the Qdrant vector database using local semantic search embeddings
     to retrieve compliance, security, and design guidelines matching the topic.
     Enforces a strict similarity threshold to prevent hallucinations.
     """
     try:
-        # Fetch configurable similarity threshold dynamically from environment
-        SIMILARITY_THRESHOLD = float(os.getenv("SIMILARITY_THRESHOLD", "0.65"))
+        # Align default baseline fallback to project standard 0.45
+        SIMILARITY_THRESHOLD = float(os.getenv("SIMILARITY_THRESHOLD", "0.45"))
 
         # Compute dense vector dimensions locally on the host CPU (384-dimensions)
         query_vector = embedding_model.encode(topic).tolist()
-        
+
         # Execute cosine distance search over the seeded compliance collection
         raw_results = qdrant_client.search(
             collection_name=COLLECTION_NAME,
             query_vector=query_vector,
             limit=3
         )
-        
+
         # Filter out low-confidence results below the strict threshold
         results = [r for r in raw_results if r.score >= SIMILARITY_THRESHOLD]
-        
+
         # Handle Abstention Gate with structured JSON
         if not results:
             return json.dumps({
@@ -53,7 +53,7 @@ def find_rules(topic: str) -> str:
                 "reason": f"No rules found above similarity threshold {SIMILARITY_THRESHOLD} — flagged for human review",
                 "retrieved_passages": []
             })
-            
+
         # Compile structured passages for frontend inspector ingestion
         passages = []
         for res in results:
@@ -63,13 +63,13 @@ def find_rules(topic: str) -> str:
                 "score": round(res.score, 4),
                 "source": res.payload.get("source", "")
             })
-            
+
         return json.dumps({
             "status": "found",
             "topic": topic,
             "retrieved_passages": passages
         })
-        
+
     except Exception as e:
         return json.dumps({
             "status": "error",
@@ -82,7 +82,7 @@ def find_rules(topic: str) -> str:
 @mcp.tool()
 def inspect_artifact(content: str, artifact_type: str = "openapi") -> str:
     """
-    Parses and standardizes raw API specifications (YAML/JSON/Markdown) into a 
+    Parses and standardizes raw API specifications (YAML/JSON/Markdown) into a
     structured JSON layout highlighting endpoints, parameters, and auth schemes.
     """
     try:
@@ -92,7 +92,7 @@ def inspect_artifact(content: str, artifact_type: str = "openapi") -> str:
             "detected_endpoints": [],
             "auth_mechanisms": []
         }
-        
+
         # Scenario A: Handle JSON or YAML OpenAPI Specifications
         if "paths" in content or "openapi" in content or "swagger" in content:
             try:
@@ -100,23 +100,23 @@ def inspect_artifact(content: str, artifact_type: str = "openapi") -> str:
                 if isinstance(data, dict):
                     paths_dict = data.get("paths", {})
                     summary["detected_endpoints"] = list(paths_dict.keys())
-                    
+
                     components = data.get("components", {})
                     if "securitySchemes" in components:
                         summary["auth_mechanisms"] = list(components["securitySchemes"].keys())
             except Exception:
-                summary["detected_endpoints"] = re.findall(r'(?:^\s*[\'"]?\/[a-zA-Z0-9_\-\/]+[\'"]?:)', content, re.MULTILINE)
-        
+                summary["detected_endpoints"] = re.findall(r'(?:^\s*[\'\"]?\/[a-zA-Z0-9_\-\/.]+[\'\"]?:)', content, re.MULTILINE)
+
         # Scenario B: Handle raw Markdown documentation submissions
         else:
             summary["content_type_inferred"] = "markdown_documentation"
-            summary["detected_endpoints"] = re.findall(r'(?:GET|POST|PUT|DELETE|PATCH)\s+(\/[a-zA-Z0-9_\-\/]+)', content, re.IGNORECASE)
+            summary["detected_endpoints"] = re.findall(r'(?:GET|POST|PUT|DELETE|PATCH)\s+(\/[a-zA-Z0-9_\-\/.]+)', content, re.IGNORECASE)
             if any(k in content.lower() for k in ["auth", "token", "api-key"]):
                 summary["auth_mechanisms"].append("Inferred Token/Key Reference")
 
         # Return a clean structured JSON dump string
         return json.dumps(summary)
-        
+
     except Exception as e:
         return json.dumps({
             "status": "error",
@@ -127,14 +127,15 @@ def inspect_artifact(content: str, artifact_type: str = "openapi") -> str:
 @mcp.tool()
 def save_conformance_check(artifact_name: str, summary_json: str, findings_json: str) -> str:
     """
-    Saves the finalized API conformance check metrics and granular cited findings 
-    directly into the persistent relational PostgreSQL database.
+    Saves the finalized API conformance check metrics and granular cited findings
+    directly into the persistent relational PostgreSQL database with layout normalization.
     """
     try:
         import psycopg2
+        import json
         db_url = os.getenv("POSTGRES_URL", "postgresql://postgres:postgrespassword@localhost:5432/conformance_checker")
         conn = psycopg2.connect(db_url)
-        
+
         with conn.cursor() as cur:
             # 1. Initialize data tables if missing
             cur.execute("""
@@ -156,25 +157,57 @@ def save_conformance_check(artifact_name: str, summary_json: str, findings_json:
                     rule_passage TEXT
                 );
             """)
-            
+
+            # Validate summary data format for JSONB compatibility
+            validated_summary = summary_json
+            if isinstance(validated_summary, str):
+                try:
+                    p = json.loads(validated_summary)
+                    if isinstance(p, str): validated_summary = p
+                except Exception:
+                    validated_summary = json.dumps({"summary": summary_json})
+            else:
+                validated_summary = json.dumps(validated_summary)
+
             # 2. Insert master session tracking entry
             cur.execute(
                 "INSERT INTO compliance_checks (artifact_name, summary) VALUES (%s, %s) RETURNING id;",
-                (artifact_name, summary_json)
+                (artifact_name, validated_summary)
             )
             check_id = cur.fetchone()[0]
-            
-            # 3. Insert individual cited rule logs
-            findings = json.loads(findings_json)
+
+            # 3. Insert individual cited rule logs (Defensive Unpacking Architecture)
+            findings = findings_json
+            if isinstance(findings, str):
+                try:
+                    findings = json.loads(findings)
+                    if isinstance(findings, str): findings = json.loads(findings)
+                except Exception:
+                    pass
+
+            if isinstance(findings, dict): findings = [findings]
+            elif not isinstance(findings, list): findings = []
+
             for f in findings:
+                if isinstance(f, str):
+                    try: f = json.loads(f)
+                    except Exception: f = {"details": f}
+                if not isinstance(f, dict): f = {}
+
+                # 🌟 Dynamic Fallback Mapping prevents empty columns
+                extracted_title = f.get("rule_title") or f.get("endpoint") or "Global Requirement"
+                extracted_details = f.get("details") or f.get("reason") or "No clear validation details logged."
+                extracted_passage = f.get("rule_passage") or f.get("text") or ""
+                extracted_score = f.get("score") if f.get("score") is not None else None
+
                 cur.execute("""
                     INSERT INTO check_findings (check_id, rule_title, verdict, score, details, rule_passage)
                     VALUES (%s, %s, %s, %s, %s, %s);
-                """, (check_id, f.get("rule_title"), f.get("verdict"), f.get("score"), f.get("details"), f.get("rule_passage")))
-                
+                """, (check_id, extracted_title, f.get("verdict"), extracted_score, extracted_details, extracted_passage))
+
             conn.commit()
             conn.close()
-            
+
         return json.dumps({"status": "success", "check_id": check_id, "message": "Telemetry logged to Postgres successfully."})
     except Exception as e:
         return json.dumps({"status": "error", "reason": f"Database persistence failure: {str(e)}"})

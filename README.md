@@ -1,171 +1,87 @@
-# Agentic API Conformance Checker
+# Agentic API Conformance Checker (OpenClaw + FastMCP Architecture)
 
-The Agentic API Conformance Checker is an intelligent, automated testing framework designed to analyze, ingest, and verify API implementations against formal specifications. By leveraging agentic AI workflows, semantic search, and vector databases, it automatically checks conformance, identifies discrepancies, and ensures robust compliance with security and design standards.
-
----
-
-## 🚀 Architecture & Strategy
-
-This project implements a **decoupled LLM client strategy** inside `src/agent/llm_client.py`. Instead of tightly coupling the agentic engine to a specific provider, the LLM is treated as an abstracted infrastructure service. 
-
-While the system is natively designed to integrate open-weight models, we route reasoning workloads through the high-performance **Groq API** (`llama-3.3-70b-versatile`). This design choice isolates the core application code from upstream API variations, provides error isolation, and allows seamless, single-variable model swapping without modifications to the codebase.
+An enterprise-grade, automated security and architecture compliance compliance-auditing framework. This platform ingests raw OpenAPI/Swagger schemas or custom API markdown document specifications, routes them through a specialized AI reasoning core governed by rigorous local guardrails, validates endpoint structural signatures against vector-embedded compliance engines (OWASP API Top 10, OWASP ASVS 4.0.3, and Zalando REST Guidelines), and logs multi-dimensional telemetry reports to a localized PostgreSQL data warehouse for visualization.
 
 ---
 
-## 📁 Repository Structure
-```plaintext
-.
-├── corpus/                 # Compliance guidelines and raw text documents
-│   ├── raw/                # Targeted ingestion home for OWASP/Zalando definitions
-│   └── download.sh         # Automated corpus procurement script
-├── docs/                   # Project design documentation and assignment specifications
-│   ├── ARCHITECTURE.md     # System structural mapping and data flows
-│   ├── DEPLOYMENT.md       # Target environment environment properties
-│   └── PRD.md              # Product Requirement Documentation
-├── qdrant/
-│   └── storage/            # Persistent local storage volume mapping for Qdrant
-├── scripts/                # Operational lifecycle scripts (setup, restart, initialization)
-│   ├── ingest.sh
-│   ├── restart.sh
-│   └── setup.sh
-├── src/                    # Core application layer codebase
-│   ├── agent/              # Orchestration brain & OpenClaw engine runtime
-│   │   ├── AGENTS.md       # Behavioral context instructions
-│   │   ├── IDENTITY.md     # Agent identity persona definitions
-│   │   ├── SOUL.md         # Operational constraints and logic bounds
-│   │   ├── TOOLS.md        # Declared tool execution schemas
-│   │   ├── llm_client.py   # Decoupled interface for the Groq inference gateway
-│   │   ├── main.py         # Primary orchestration execution entrypoint
-│   │   └── openclaw.config.js # OpenClaw platform parameters
-│   ├── frontend/           # Presentation layout files
-│   ├── ingestion/          # Core vector extraction utilities
-│   │   └── parse_corpus.py # Script mapping raw data into vector spaces
-│   └── mcp-server/
-│       └── tools/          # Model Context Protocol boundary interface tools
-├── .env.example            # Blueprint for environment variables (not committed)
-├── .gitignore              # Protects secrets (.env) and caches from reaching GitHub
-├── .python-version         # Pinpoints the exact Python runtime version for uv
-├── docker-compose.yml      # Defines database containers (PostgreSQL + Qdrant)
-├── pyproject.toml          # Project configuration and package requirements
-└── uv.lock                 # Deterministic locked dependency graph for reproducibility
-```
+## 🏗️ Core System Architecture
+
+The application decouples ingestion, real-time agentic reasoning, tool orchestration, and analytical storage into isolated, modular boundaries:
+
+* **Cognitive Controller Layer:** Managed via OpenClaw Gateway Daemon. It isolates the LLM's behavioral prompt configurations into deterministic, declarative state files (`IDENTITY.md`, `SOUL.md`, `AGENTS.md`).
+* **Tool & Context Discovery Layer:** Formulated over the Model Context Protocol (MCP) using a high-performance Python `FastMCP` server communicating via standard I/O pipes.
+* **Vector Vector Space (RAG Engine):** Powered by an offline Qdrant instance. Text blocks are mapped into 384-dimensional mathematical arrays via local CPU sentence-transformers (`all-MiniLM-L6-v2`).
+* **Relational Storage Matrix:** PostgreSQL stores final audit verdicts (`PASS`, `FAIL`, `ABSTAIN`) and exact semantic distance parameters for frontend rendering.
 
 ---
 
-## ⚙️ VPS Resource Optimization & Resiliency (Crucial)
+## ⚡ Quick Deployment & Data Ingestion (One-Click)
 
-Standard AWS Free Tier instances launch with a baseline default configuration of an 8GB storage drive and 1GB of physical hardware RAM.
+The codebase ships with native DevSecOps automation wrappers inside the `scripts/` directory to guarantee deterministic deployment stabilization and repeatable ingestion lifecycles.
 
-Because modern deep-learning libraries (like PyTorch, Hugging Face Hub, and tokenizers) generate high memory matrix peaks during initial script execution, running an ingestion engine on a raw 1GB system will cause the Linux kernel to immediately crash the process with an Out Of Memory: Killed termination.
-
-To secure absolute stability, the target VPS environment has been optimized using the following operations:
-
-### 1. Expanding the Physical Hard Drive (From 8GB to 20GB)
-1. Go to the AWS EC2 Console $\rightarrow$ **Instances** $\rightarrow$ Select your instance.
-2. Click the **Storage** tab at the bottom $\rightarrow$ click the **Volume ID** link.
-3. Select the volume $\rightarrow$ **Actions** $\rightarrow$ **Modify Volume**. Change Size from 8 to 20 and save.
-4. Run these terminal commands to force Ubuntu to claim the newly allocated physical cloud space:
-   ```bash
-   sudo growpart /dev/nvme0n1 1
-   sudo resize2fs /dev/root
-   ```
-5. Confirm expansion success by running `df -h`. Your `/dev/root` partition should now show 12G+ of free space.
-
-### 2. Allocating a 2GB Emergency Virtual RAM Swap File
-Run these commands sequentially to use a small fraction of your new disk space as backup memory:
+### 1️⃣ Clone and Environment Initialization
+Clone the repository to your host VPS or local machine and configure your structural credentials within the environment context:
 ```bash
-# Allocate a 2 Gigabyte layout file on disk
-sudo fallocate -l 2G /swapfile
-
-# Set restrictive read/write flags for system core safety
-sudo chmod 600 /swapfile
-
-# Format the allocated partition space into Linux Swap format
-sudo mkswap /swapfile
-
-# Enable the virtual swap memory runtime loop
-sudo swapon /swapfile
-
-# Make the configuration permanent across system reboots
-echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
-```
-Verify activation by running `free -h`. The `Swap:` row will confirm 2.0Gi of active virtual breathing room.
-
----
-
-## 🛠️ Step-by-Step Configuration Guide
-
-Follow these sequential steps to deploy, configure, sync, and run the entire environment from absolute scratch.
-
-### Step 1: Clone the Codebase
-```bash
+# Clone the workspace repository
 git clone https://github.com/gulatikanan/agentic-api-conformance-checker.git
 cd agentic-api-conformance-checker
-```
 
-### Step 2: Set Up Local Secrets Environment
-Generate your live runtime configuration mapping profile:
-```bash
+# Initialize your environment secrets mapping
 cp .env.example .env
-```
-Open the newly generated `.env` file and insert your valid API tokens:
-```plaintext
-LLM_PROVIDER=groq
-LLM_API_KEY=gsk_your_secret_production_key_here
+# Edit .env to populate your GEMINI_API_KEY, POSTGRES_URL, and QDRANT_URL
+nano .env
 ```
 
-### Step 3: Run the Multi-Container Infrastructure
-Launch your isolated background services (Qdrant Vector Database + PostgreSQL) in detached background daemon mode:
+### 2️⃣ Infrastructure Redeployment
+Run the unified setup script. This script automatically provisions your background database containers (PostgreSQL and Qdrant) via Docker Compose, validates package managers, and hooks into uv to cleanly compile and synchronize the virtual runtime dependencies:
 ```bash
-docker compose up -d
+chmod +x scripts/*.sh
+./scripts/setup.sh
 ```
-To verify that both engines are running healthily, run `docker ps`. You will see Qdrant serving on port `6333` and PostgreSQL on port `5432`.
 
-### Step 4: Synchronize Python Virtual Environment & Dependencies
-Initialize and install the locked project workspace using the fast package sync manager `uv`:
+### 3️⃣ Knowledge Base Re-Ingestion (RAG Seeding)
+To rebuild or refresh the vector database knowledge collections, trigger the specialized parsing runner. This engine completely wipes the target Qdrant collection, parses the raw raw text corpus, computes local structural embeddings, and stream‑pushes the points into your vector engine:
 ```bash
-# Creates the local virtual environment and installs exact deterministic package versions
-uv sync
+./scripts/ingest.sh
 ```
 
-### Step 5: Run Ingestion Pipeline (Seeding the Vector DB)
-Run the ingestion core framework using unbuffered processing output (`-u`). This script automatically extracts entries from the OWASP API Top 10, OWASP ASVS 4.0.3, and Zalando REST Guidelines, segments them into high-granularity contextual slices, computes dense geometric structures using a local embedding matrix (`all-MiniLM-L6-v2`), and seeds your database:
+### 4️⃣ Daemon Cycle & Verification
+Initialize or hot‑reload your active OpenClaw Systemd service background daemon process to lock in configuration streams and verify network service port availability (18789):
 ```bash
-.venv/bin/python -u src/ingestion/parse_corpus.py
-```
-Expected Successful Output Log:
-```plaintext
-🧠 Loading local sentence-transformers model...
-📡 Connecting to Qdrant at http://localhost:6333...
-🛠️ Creating/Resetting Qdrant collection: 'compliance_rules'...
-📖 Parsing OWASP API Top 10 Markdown files...
-📊 Parsing OWASP ASVS 4.0.3 CSV...
-📐 Parsing Zalando REST Guidelines AsciiDoc files...
-✅ Extraction finished! Total generated rule chunks: 414
-🚀 Vectorizing chunks and seeding Qdrant collection 'compliance_rules'...
-   📥 Pushed chunks 0 to 50 into Qdrant...
-   ...
-   📥 Pushed chunks 400 to 414 into Qdrant...
-
-🎯 DATABASE SEEDING COMPLETE! Your Vector Database is fully populated.
+./scripts/restart.sh
 ```
 
-### Step 6: Verify Upstream AI Inference Brain Access
-Confirm that your local system can establish network loops and authentications with the Groq inference endpoint using the diagnostic decoupled module wrapper:
+🛡️ **Critical Guardrails & Behavioral Compliance**
+The core engine is bound to a strict mathematical threshold gate defined inside the immutable operational context boundaries (`src/agent/SOUL.md`):
+
+- **The 0.45 Similarity Threshold Gate:** The `find_rules` MCP search pipeline dynamically compares vector cosine values. If the dense distance metric falls below 0.45, the system intercepts execution loops and issues a definitive `ABSTAIN` verdict labeled `no rule found — flagged for human review` to block artificial hallucinations.
+- **Verbatim Citations:** For all `PASS` or `FAIL` verdicts, the engine requires verbatim text extractions and source records from the vector payloads to prove compliance claims.
+
+## 📋 Environment Configuration Reference (.env)
+Ensure the following system variables are exported within your local host runtime configuration:
+```ini
+# Core AI Inference Secrets
+LLM_PROVIDER=gemini
+GEMINI_MODEL=""
+GEMINI_API_KEY=AIzaSy...
+
+# Operational Infrastructure Ports & Coordinates
+QDRANT_URL=http://localhost:6333
+QDRANT_COLLECTION=compliance_rules
+POSTGRES_URL=postgresql://postgres:postgrespassword@localhost:5432/conformance_checker
+
+# Algorithmic Safety Rails
+SIMILARITY_THRESHOLD=0.45
+```
+
+## 📈 System Health & Maintenance Commands
 ```bash
-uv run python -c "from src.agent.llm_client import AgentBrain; print('Brain Response:', AgentBrain().generate('Say connection verified'))"
+# View live output logs of the background OpenClaw service
+sudo journalctl -u openclaw.service -f -n 100
+
+# Inspect local database tables structure directly within the container
+docker exec -it agentic-api-conformance-checker-db-1 psql -U postgres -d conformance_checker -c "\dt"
+
+# Manually trigger an audit run via the OpenClaw Agent CLI
+openclaw agent --agent main --prompt "Analyze standard security posture for specifications inside data/target_spec.json"
 ```
-Expected Output:
-```plaintext
-Brain Response: connection verified
-```
-
----
-
-## 📊 Evaluation Rubric Progress
-
-| Requirement Component | Total Score Weights | Active Status |
-| :--- | :--- | :--- |
-| **Infrastructure & Deploy** (VPS host config, data persistence, and README replication checks) | 20 Marks | Passed & Completed ✅ |
-| **RAG & Retrieval** (Granular corpus chunking, vector embedding generation, database seeding) | 20 Marks | Passed & Completed ✅ (414 Rules Live) |
-| **MCP Boundary** (Strict access abstraction layers via custom standalone tools) | 25 Marks | 🔄 In Engineering Phase |
