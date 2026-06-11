@@ -120,7 +120,7 @@ The OpenClaw agent has zero direct interaction or drivers connected to the under
 To prevent Out-Of-Memory (OOM) kernel crashes during vector extraction on limited hardware allocations, a 2GB Virtual Memory Swap File is configured on the host server disk. This absorbs high execution compilation spikes securely.
 
 ### 4.3. Abstention Logic Threshold
-Any retrieval results producing similarity scores below a `0.70` threshold force an automatic `Abstain` verdict. This restricts the LLM from inventing or guessing policy constraints, defaulting the asset directly to a human reviewer flags state.
+Any retrieval results producing similarity scores below a `0.65` threshold force an automatic `Abstain` verdict. This restricts the LLM from inventing or guessing policy constraints, defaulting the asset directly to a human reviewer flags state.
 
 ## 5. Data Models
 
