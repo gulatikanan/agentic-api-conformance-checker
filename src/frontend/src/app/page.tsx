@@ -1,5 +1,6 @@
 import { Client } from 'pg'
 
+// Force Next.js to always execute fresh server-side DB lookups per page refresh
 export const dynamic = 'force-dynamic'
 
 async function getAuditData() {
@@ -8,13 +9,18 @@ async function getAuditData() {
   
   try {
     await client.connect()
+    
+    // Fetch master conformance scans sorted by time
     const checksRes = await client.query('SELECT * FROM compliance_checks ORDER BY created_at DESC;')
+    
+    // Fetch individual granular cited findings rows
     const findingsRes = await client.query('SELECT * FROM check_findings ORDER BY id ASC;')
+    
     await client.end()
     
     return {
       checks: checksRes.rows,
-      findings: findingsRes.rows,
+      findings: findingsRes.rows
     }
   } catch (error) {
     console.error('Database connection error:', error)
@@ -27,6 +33,7 @@ export default async function DashboardPage() {
 
   return (
     <main className="min-h-screen p-8 max-w-7xl mx-auto">
+      {/* Upper Brand Header */}
       <header className="border-b border-slate-800 pb-6 mb-8 flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-white flex items-center gap-2">
@@ -53,6 +60,7 @@ export default async function DashboardPage() {
             
             return (
               <section key={check.id} className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
+                {/* Check Meta Header Card */}
                 <div className="bg-slate-900 border-b border-slate-800 p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div>
                     <h2 className="text-xl font-bold text-slate-200 font-mono">{check.artifact_name}</h2>
@@ -67,14 +75,25 @@ export default async function DashboardPage() {
                   </div>
                 </div>
 
+                {/* Granular Audit Card List */}
                 <div className="p-6 space-y-4">
                   {currentFindings.length === 0 ? (
                     <p className="text-sm text-slate-500 font-mono">No endpoint clauses analyzed inside this session.</p>
                   ) : (
                     <div className="grid grid-cols-1 gap-4">
                       {currentFindings.map((finding) => {
-                        const verdict = (finding.verdict || 'ABSTAIN').toUpperCase()
+                        // Defensive extraction for handling raw string vs JSON object payloads
+                        let rawVerdict = 'ABSTAIN'
+                        if (finding.verdict) {
+                          if (typeof finding.verdict === 'object') {
+                            rawVerdict = finding.verdict.verdict || finding.verdict.status || 'ABSTAIN'
+                          } else {
+                            rawVerdict = finding.verdict
+                          }
+                        }
+                        const verdict = String(rawVerdict).toUpperCase()
                         
+                        // Pick border/text colors based on verdict state
                         let badgeColor = 'bg-slate-950 text-slate-400 border-slate-700'
                         if (verdict === 'PASS') badgeColor = 'bg-emerald-950/40 text-emerald-400 border-emerald-800'
                         if (verdict === 'FAIL') badgeColor = 'bg-rose-950/40 text-rose-400 border-rose-800'
@@ -91,7 +110,9 @@ export default async function DashboardPage() {
                                   </span>
                                 )}
                               </div>
-                              <span className={`text-xs font-bold font-mono px-2.5 py-1 rounded border tracking-wider ${badgeColor}`}>{{verdict}}</span>
+                              <span className={`text-xs font-bold font-mono px-2.5 py-1 rounded border tracking-wider ${badgeColor}`}>
+                                {verdict}
+                              </span>
                             </div>
 
                             <p className="text-sm text-slate-300 leading-relaxed bg-slate-900/50 p-3 rounded border border-slate-900">

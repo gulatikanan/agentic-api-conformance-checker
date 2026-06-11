@@ -2,10 +2,13 @@ import os
 import json
 import re
 import yaml
+import sys
+import logging
 from mcp.server.fastmcp import FastMCP
-from qdrant_client import QdrantClient
-from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
+
+# Force standard logs to pipe through stderr, keeping stdout 100% clean for JSON-RPC data packets
+logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 
 # Load workspace configurations (.env)
 load_dotenv()
@@ -13,13 +16,13 @@ load_dotenv()
 # 1. Initialize the official FastMCP context block
 mcp = FastMCP("API Conformance Checker Backend")
 
-# 2. Establish connections to the local storage infrastructure layers
+# 2. Extract environment coordinates
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
 COLLECTION_NAME = os.getenv("QDRANT_COLLECTION", "compliance_rules")
 
-qdrant_client = QdrantClient(url=QDRANT_URL)
-embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
-
+# Keep heavy client references global but uninitialized
+qdrant_client = None
+embedding_model = None
 
 @mcp.tool()
 def find_rules(topic: str) -> str:
@@ -28,19 +31,33 @@ def find_rules(topic: str) -> str:
     to retrieve compliance, security, and design guidelines matching the topic.
     Enforces a strict similarity threshold to prevent hallucinations.
     """
+    global qdrant_client, embedding_model
     try:
+        # Lazy import and load heavy ML frameworks ONLY when the tool is explicitly called
+        if qdrant_client is None or embedding_model is None:
+            from qdrant_client import QdrantClient
+            from sentence_transformers import SentenceTransformer
+            
+            # Silence sub-library loggers right after they load
+            logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
+            logging.getLogger("httpx").setLevel(logging.WARNING)
+            
+            qdrant_client = QdrantClient(url=QDRANT_URL)
+            embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+
         # Align default baseline fallback to project standard 0.45
         SIMILARITY_THRESHOLD = float(os.getenv("SIMILARITY_THRESHOLD", "0.45"))
 
         # Compute dense vector dimensions locally on the host CPU (384-dimensions)
         query_vector = embedding_model.encode(topic).tolist()
 
-        # Execute cosine distance search over the seeded compliance collection
-        raw_results = qdrant_client.search(
+        # Modernized Qdrant API: query_points replaces deprecated search method
+        response = qdrant_client.query_points(
             collection_name=COLLECTION_NAME,
-            query_vector=query_vector,
+            query=query_vector,
             limit=3
         )
+        raw_results = response.points
 
         # Filter out low-confidence results below the strict threshold
         results = [r for r in raw_results if r.score >= SIMILARITY_THRESHOLD]
@@ -137,7 +154,7 @@ def save_conformance_check(artifact_name: str, summary_json: str, findings_json:
         conn = psycopg2.connect(db_url)
 
         with conn.cursor() as cur:
-            # 1. Initialize data tables if missing
+            # Initialize data tables if missing
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS compliance_checks (
                     id SERIAL PRIMARY KEY,
@@ -158,7 +175,6 @@ def save_conformance_check(artifact_name: str, summary_json: str, findings_json:
                 );
             """)
 
-            # Validate summary data format for JSONB compatibility
             validated_summary = summary_json
             if isinstance(validated_summary, str):
                 try:
@@ -169,14 +185,12 @@ def save_conformance_check(artifact_name: str, summary_json: str, findings_json:
             else:
                 validated_summary = json.dumps(validated_summary)
 
-            # 2. Insert master session tracking entry
             cur.execute(
                 "INSERT INTO compliance_checks (artifact_name, summary) VALUES (%s, %s) RETURNING id;",
                 (artifact_name, validated_summary)
             )
             check_id = cur.fetchone()[0]
 
-            # 3. Insert individual cited rule logs (Defensive Unpacking Architecture)
             findings = findings_json
             if isinstance(findings, str):
                 try:
@@ -194,7 +208,6 @@ def save_conformance_check(artifact_name: str, summary_json: str, findings_json:
                     except Exception: f = {"details": f}
                 if not isinstance(f, dict): f = {}
 
-                # 🌟 Dynamic Fallback Mapping prevents empty columns
                 extracted_title = f.get("rule_title") or f.get("endpoint") or "Global Requirement"
                 extracted_details = f.get("details") or f.get("reason") or "No clear validation details logged."
                 extracted_passage = f.get("rule_passage") or f.get("text") or ""
