@@ -1,3 +1,13 @@
-postgres/data/
-qdrant/storage/
+# Core ignore rules
+.env
+node_modules/
+__pycache__/
 .venv/
+*.env.local
+qdrant/storage/
+!qdrant/storage/.gitkeep
+postgres/data/
+
+# Frontend generated / dependency folders
+src/frontend/node_modules/
+src/frontend/.next/
