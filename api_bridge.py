@@ -114,19 +114,43 @@ API Spec to check:
         with open(openclaw_json_path, "w") as f:
             json.dump(ocl_cfg, f, indent=2)
 
-        result = subprocess.run(
-            [OPENCLAW_BIN, "agent", "--agent", "main", "--local",
-             "--session-id", session_id,
-             "--message", prompt, "--json"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            timeout=180,
-            env=custom_env,
-        )
+        import time
+        max_retries = 3
+        for attempt in range(max_retries):
+            # Clear SQLite cooldown before EVERY attempt
+            if os.path.exists(sqlite_db):
+                try:
+                    _conn = _sqlite3.connect(sqlite_db)
+                    _cur = _conn.cursor()
+                    _cur.execute("UPDATE auth_profile_state SET state_json = ? WHERE state_key = 'primary'",
+                        (json.dumps({"version":1,"lastGood":{"google":"google:default"},"usageStats":{}}),))
+                    _conn.commit()
+                    _conn.close()
+                except Exception:
+                    pass
 
-        combined = result.stdout.strip()
-        
+            result = subprocess.run(
+                [OPENCLAW_BIN, "agent", "--agent", "main", "--local",
+                 "--session-id", session_id,
+                 "--message", prompt, "--json"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                timeout=180,
+                env=custom_env,
+            )
+            combined = result.stdout.strip()
+
+            # Retry on 429 rate limit errors
+            if "429" in combined or "RESOURCE_EXHAUSTED" in combined or "rate_limit" in combined.lower():
+                if attempt < max_retries - 1:
+                    wait_secs = 30 * (attempt + 1)
+                    print(f"[RETRY] Rate limit hit (attempt {attempt+1}/{max_retries}), waiting {wait_secs}s...", file=sys.stderr, flush=True)
+                    time.sleep(wait_secs)
+                    continue
+            break  # Success or non-retryable error
+
+
         # Log raw output to stderr so it appears in journalctl
         import sys
         print(f"[DEBUG] OpenClaw raw output (first 1000 chars):\n{combined[:1000]}", file=sys.stderr, flush=True)
