@@ -13,6 +13,7 @@ Before launching deployment sequences, ensure the host environment matches the v
 * **Container Runtime:** Docker Engine and Docker Compose v2 (managing isolated relational and vector database layers).
 * **Python Runtime Environment:** Version 3.11.x or higher.
 * **Dependency Manager:** `uv` (required for deterministic tracking locks and rapid synchronization environments).
+* **Process Manager:** `systemd` (required to guarantee the 7-day minimum uptime capability).
 
 ---
 
@@ -22,13 +23,12 @@ Copy `.env.example` to generate your local `.env` profile. The system references
 
 | Variable Name | Context Purpose | Production Template Values |
 | :--- | :--- | :--- |
-| `LLM_PROVIDER` | Selection flag for the upstream inference engine routing | `gemini` |
-| `GEMINI_MODEL` | Targeting deployment model identifier for reasoning steps | `google/gemini-1.5-pro` |
-| `GEMINI_API_KEY` | Upstream Google Cloud AI platform access authentication credential | `AIzaSyYourSecretProductionKey...` |
+| `LLM_PROVIDER` | Selection flag for the upstream inference engine routing | `google` |
+| `GEMINI_MODEL` | Targeting deployment model identifier for reasoning steps | `gemini-2.5-flash` |
+| `GEMINI_API_KEY` | Upstream Google Cloud AI platform access authentication credential | `AIzaSy...` |
+| `GROQ_API_KEY` | (Optional) Upstream Groq platform credential for 100% free lightning-fast inference | `gsk_...` |
 | `QDRANT_URL` | Interface access address of the vector container database | `http://127.0.0.1:6333` |
-| `QDRANT_COLLECTION` | Target collection namespace inside the vector search instance | `compliance_rules` |
-| `POSTGRES_URL` | Complete interaction connection string for PostgreSQL engine | `postgresql://postgres:postgrespassword@localhost:5432/conformance_checker` |
-| `SIMILARITY_THRESHOLD`| Strict algorithmic guardrail baseline to prevent hallucinations | `0.45` |
+| `POSTGRES_URL` | Complete interaction connection string for PostgreSQL engine | `postgresql://...` |
 
 ---
 
@@ -61,10 +61,10 @@ cp .env.example .env
 nano .env
 chmod 600 .env
 ```
-> **⚠️ Security Warning:** Restricting read permissions to `chmod 600` guarantees that background OS agents cannot scan your active Gemini tokens or database credentials.
+> **⚠️ Security Warning:** Restricting read permissions to `chmod 600` guarantees that background OS agents cannot scan your active LLM tokens or database credentials.
 
 ### 🚀 Step 3.4: Trigger Automated Orchestration Lifecycles
-The application utilizes native DevSecOps wrappers inside the `scripts/` directory to manage system dependencies and container architectures without manual error steps:
+The application utilizes native DevSecOps wrappers inside the `scripts/` directory to manage system dependencies, container architectures, and systemd daemons:
 ```bash
 # 1. Grant global executable permissions to the script suite
 chmod +x scripts/*.sh
@@ -75,30 +75,25 @@ chmod +x scripts/*.sh
 # 3. Parse compliance files, compute local embeddings, and populate Qdrant
 ./scripts/ingest.sh
 
-# 4. Flush zombie process ports, reload configs, and trigger the background daemon
+# 4. Install systemd units, flush zombie ports, and start the background daemons
 ./scripts/restart.sh
 ```
 
 ### 4. Multi-Tiered Infrastructure Verification
 Execute these baseline validation checkpoints to verify overall ecosystem communication integrity.
 
-#### 4.1. Qdrant Vector Engine Node
+#### 4.1. Systemd Daemons (7-Day Uptime Guarantee)
 ```bash
-curl http://localhost:6333/health
+sudo systemctl is-active api-bridge
+sudo systemctl is-active openclaw
 ```
-*Expected Return Payload:* `{"title":"qdrant - vector search engine","version":"1.x.x"}`
+*Expected Return:* `active` for both services.
 
-#### 4.2. PostgreSQL Persistent Database Layer
+#### 4.2. API Bridge Boundary Health
 ```bash
-docker exec -it agentic-api-conformance-checker-db-1 pg_isready -U postgres
+curl http://localhost:8000/health
 ```
-*Expected Return Payload:* `/var/run/postgresql:5432 - accepting connections`
-
-#### 4.3. OpenClaw Background Systemd Daemon Process
-```bash
-sudo systemctl status openclaw.service
-```
-*Expected Return Payload:* Verify the active state displays a green **active (running)** status, listening on localized interface port **18789**.
+*Expected Return Payload:* `{"status": "ok", "agent": "openclaw", "mcp": "conformance-tools"}`
 
 ### 5. Live Maintenance: Re-Ingesting the Rule Corpus
 If the upstream compliance rulebooks update, or you inject new custom corporate guidelines, execute a data sync hot‑reload. The pipeline cleanly flushes the existing vector namespace and recalculates matrices:
@@ -107,14 +102,15 @@ If the upstream compliance rulebooks update, or you inject new custom corporate 
 ```
 
 ### 6. Real-World Operational Troubleshooting Playbook
-#### 🔴 Symptom 6.1: Terminal Prints "Killed" Instantly During Ingestion
+
+#### 🔴 Symptom 6.1: 429 Quota Exceeded or 413 Payload Too Large (LLM APIs)
+*Root Cause:* Free tier LLMs (like Google AI Studio or Groq) have strict rate limits or context size limits.
+*Remediation:* Switch the OpenClaw configuration to use a `minimal` tools profile to drastically reduce the context window overhead (done automatically in setup), and switch between Groq/Gemini as needed depending on rate limits.
+
+#### 🔴 Symptom 6.2: Terminal Prints "Killed" Instantly During Ingestion
 *Root Cause:* The host instance lacks virtual swap allocations, causing the Linux OOM monitor to terminate PyTorch transformer pipelines during embedding calculations.
 *Remediation:* Execute the manual swap space configuration instructions outlined in **Step 3.1**.
 
-#### 🔴 Symptom 6.2: Gateway Port Binding Failure / 18789 Already in Use
-*Root Cause:* A zombie daemon background thread retains ownership of network interface port 18789, preventing a fresh config reload.
-*Remediation:* Run `./scripts/restart.sh`. This process automatically scans for dangling port locks, shuts down orphaned processes via `fuser`, and rebuilds a clean communication stream.
-
-#### 🔴 Symptom 6.3: Relational Logs Show Blank Rows (NULL) inside Database UI
-*Root Cause:* Misalignment between AI response fields and database ingestion parameters.
-*Remediation:* Verify that `src/mcp-server/tools/server.py` implements defensive fallback extractions matching the endpoint and reason response patterns produced by OpenClaw.
+#### 🔴 Symptom 6.3: Gateway Port Binding Failure / 8000 or 18789 Already in Use
+*Root Cause:* A zombie daemon background thread retains ownership of network interface ports, preventing a fresh config reload.
+*Remediation:* Run `./scripts/restart.sh`. This process automatically scans for dangling port locks, shuts down orphaned processes via `fuser`, and rebuilding a clean communication stream across `systemd`.
