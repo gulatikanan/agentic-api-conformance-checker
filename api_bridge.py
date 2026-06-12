@@ -59,7 +59,6 @@ API Spec to check:
     try:
         result = subprocess.run(
             [OPENCLAW_BIN, "agent", "--agent", "main", "--local",
-             "--model", OPENCLAW_MODEL,
              "--message", prompt, "--json"],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,   # merge stderr into stdout — identical to 2>&1
