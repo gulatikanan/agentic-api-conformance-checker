@@ -10,8 +10,12 @@ GET /health  — liveness probe
 
 import os
 import re
+import sys
 import json
 import uuid
+import time
+import shutil
+import sqlite3
 import subprocess
 import psycopg2
 from datetime import datetime, timezone
@@ -57,9 +61,6 @@ API Spec to check:
 {spec_data}"""
 
     try:
-        import os
-        import uuid
-        
         # Aggressively destroy ALL openclaw sessions via shell to bypass permission/locking issues
         os.system("rm -rf /home/ubuntu/.openclaw/agents/main/sessions/*")
         os.system("rm -rf /home/ubuntu/.openclaw/sessions/*")
@@ -76,7 +77,6 @@ API Spec to check:
         custom_env["GOOGLE_GENERATIVE_AI_API_KEY"] = gemini_key
         
         # Delete the entire sessions directory to eliminate the 130k token history
-        import shutil
         sessions_dir = "/home/ubuntu/.openclaw/agents/main/sessions"
         if os.path.exists(sessions_dir):
             shutil.rmtree(sessions_dir)
@@ -94,8 +94,7 @@ API Spec to check:
         sqlite_db = "/home/ubuntu/.openclaw/agents/main/agent/openclaw-agent.sqlite"
         if os.path.exists(sqlite_db):
             try:
-                import sqlite3 as _sqlite3
-                _conn = _sqlite3.connect(sqlite_db)
+                _conn = sqlite3.connect(sqlite_db)
                 _cur = _conn.cursor()
                 _new_profile = json.dumps({"version":1,"profiles":{"google:default":{"type":"api_key","provider":"google","key":gemini_key}}})
                 _cur.execute("UPDATE auth_profile_store SET store_json = ? WHERE store_key = 'primary'", (_new_profile,))
@@ -114,13 +113,12 @@ API Spec to check:
         with open(openclaw_json_path, "w") as f:
             json.dump(ocl_cfg, f, indent=2)
 
-        import time
         max_retries = 3
         for attempt in range(max_retries):
             # Clear SQLite cooldown before EVERY attempt
             if os.path.exists(sqlite_db):
                 try:
-                    _conn = _sqlite3.connect(sqlite_db)
+                    _conn = sqlite3.connect(sqlite_db)
                     _cur = _conn.cursor()
                     _cur.execute("UPDATE auth_profile_state SET state_json = ? WHERE state_key = 'primary'",
                         (json.dumps({"version":1,"lastGood":{"google":"google:default"},"usageStats":{}}),))
@@ -152,7 +150,6 @@ API Spec to check:
 
 
         # Log raw output to stderr so it appears in journalctl
-        import sys
         print(f"[DEBUG] OpenClaw raw output (first 1000 chars):\n{combined[:1000]}", file=sys.stderr, flush=True)
 
         # Search for the OpenClaw JSON envelope inside the combined output.
