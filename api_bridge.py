@@ -87,8 +87,8 @@ API Spec to check:
         
         # Patch the correct path: agents.defaults.model (confirmed from openclaw.json structure)
         ocl_cfg.setdefault("agents", {}).setdefault("defaults", {})["model"] = {
-            "primary": "google/gemini-1.5-flash",
-            "fallbacks": ["google/gemini-1.5-flash"]
+            "primary": "google/gemini-2.5-flash",
+            "fallbacks": ["google/gemini-2.5-flash"]
         }
         
         with open(openclaw_json_path, "w") as f:
