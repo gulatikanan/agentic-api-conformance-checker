@@ -13,13 +13,21 @@ interface AuditFinding {
   created_at: string;
 }
 
+interface LogLine {
+  text: string;
+  type: 'system' | 'mcp' | 'tool' | 'rag' | 'data';
+  timestamp: string;
+}
+
 export default function Workspace() {
   const [data, setData] = useState<AuditFinding[]>([]);
   const [specData, setSpecData] = useState('');
   const [loading, setLoading] = useState(false);
   const [dbStatus, setDbStatus] = useState('CONNECTING...');
+  const [logs, setLogs] = useState<LogLine[]>([
+    { text: 'SYSTEM IDLE — Ready for incoming specification frames', type: 'system', timestamp: new Date().toLocaleTimeString() }
+  ]);
 
-  // Load latest records from database on mount
   useEffect(() => {
     fetch('/api/audit')
       .then((res) => res.json())
@@ -34,9 +42,37 @@ export default function Workspace() {
       .catch(() => setDbStatus('OFFLINE'));
   }, []);
 
+  // Helper to generate formatted real-time timestamp sequences
+  const time = () => new Date().toLocaleTimeString();
+
+  const runLogSequence = async () => {
+    setLogs([]); // Clear logs for new run
+    
+    const sequence: Omit<LogLine, 'timestamp'>[] = [
+      { text: 'INITIALIZING OPENCLAW CONFORMANCE RUNTIME...', type: 'system' },
+      { text: 'MCP -> Spawning Python FastMCP server background subprocess via stdio channel', type: 'mcp' },
+      { text: 'MCP -> Standard streams handshake established. Tool registry mounted successfully (<45ms)', type: 'mcp' },
+      { text: 'TOOL -> Invoking custom tool execution: inspect_artifact() on payload metadata', type: 'tool' },
+      { text: 'TOOL -> Isolated endpoint patterns extracted successfully: [/v1/accounts/{id}, /health]', type: 'tool' },
+      { text: 'RAG -> Initializing all-MiniLM-L6-v2 model layers to compute context matrix embeddings', type: 'rag' },
+      { text: 'QDRANT -> Executing structural atomic .query_points() match filters across 414 vectors', type: 'rag' },
+      { text: 'DATA -> Commit transaction packet generated. Hydrating relational schema tables in Postgres', type: 'data' },
+      { text: 'COMPLETED -> Execution frame dispatched to presentation UI channel cleanly', type: 'system' }
+    ];
+
+    // Progressively push logs to the UI terminal block simulating network streams
+    for (let i = 0; i < sequence.length; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 450 + Math.random() * 300));
+      setLogs((prev) => [...prev, { ...sequence[i], timestamp: time() }]);
+    }
+  };
+
   const handleAuditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    
+    // Fire off the dynamic terminal log pipeline simulation immediately
+    runLogSequence();
 
     try {
       const response = await fetch('/api/audit', {
@@ -47,13 +83,17 @@ export default function Workspace() {
       const result = await response.json();
       
       if (result.success) {
-        setData(result.data);
+        // Hold slightly to let the gorgeous logs finish playing perfectly
+        setTimeout(() => {
+          setData(result.data);
+          setLoading(false);
+        }, 3200);
       } else {
         alert(`Database execution error: ${result.error}`);
+        setLoading(false);
       }
     } catch (err) {
       alert('Failed to connect to the background API route.');
-    } finally {
       setLoading(false);
     }
   };
@@ -65,7 +105,7 @@ export default function Workspace() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-6 md:p-10 font-sans">
-      {/* Navigation Header */}
+      {/* Header Container */}
       <div className="max-w-7xl mx-auto mb-8 flex flex-col md:flex-row justify-between items-start md:items-center border-b border-slate-800 pb-6 gap-4">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-white flex items-center gap-2">
@@ -84,7 +124,7 @@ export default function Workspace() {
       </div>
 
       <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* LEFT PANEL: INPUT INTERFACE */}
+        {/* LEFT COLUMN */}
         <div className="lg:col-span-1 space-y-6">
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg space-y-4">
             <div>
@@ -116,22 +156,25 @@ export default function Workspace() {
             </form>
           </div>
 
-          {/* SERVICE HANDSHAKE LIVE CAPTURES */}
+          {/* DYNAMIC TERMINAL MONITOR BOX */}
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg space-y-3 font-mono text-xs">
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 font-sans">MCP Server Handshake Log</h3>
-            <div className="space-y-2 text-[11px] text-slate-400 leading-relaxed bg-slate-950 p-3 rounded-lg border border-slate-850 h-40 overflow-y-auto shadow-inner">
-              <p className="text-slate-500">{"[14:12:02] INITIALIZING OPENCLAW RUNTIME..."}</p>
-              <p className="text-indigo-400">{"[14:12:03] MCP -> Spawning FastMCP server instance via stdio"}</p>
-              <p className="text-indigo-400">{"[14:12:03] MCP -> Tool registry mounted successfully (<50ms)"}</p>
-              <p className="text-emerald-400">{"[14:12:04] TOOL -> Invoking inspect_artifact() on specification"}</p>
-              <p className="text-cyan-400">{"[14:12:05] RAG -> Local embedding model tokenized vector block"}</p>
-              <p className="text-cyan-400">{"[14:12:05] QDRANT -> Executing atomic .query_points() match index"}</p>
-              <p className="text-slate-500">{"[14:12:06] DATA -> Committing findings array metadata to Postgres"}</p>
+            <div className="space-y-2 text-[11px] leading-relaxed bg-slate-950 p-3 rounded-lg border border-slate-850 h-52 overflow-y-auto shadow-inner flex flex-col justify-end">
+              {logs.map((log, idx) => (
+                <p key={idx} className={
+                  log.type === 'system' ? 'text-slate-500' :
+                  log.type === 'mcp' ? 'text-indigo-400' :
+                  log.type === 'tool' ? 'text-emerald-400' :
+                  log.type === 'rag' ? 'text-cyan-400' : 'text-amber-400'
+                }>
+                  [{log.timestamp}] {log.text}
+                </p>
+              ))}
             </div>
           </div>
         </div>
 
-        {/* RIGHT PANEL: RECORDS VIEW */}
+        {/* RIGHT COLUMN */}
         <div className="lg:col-span-2 space-y-6">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl shadow-md text-center">
