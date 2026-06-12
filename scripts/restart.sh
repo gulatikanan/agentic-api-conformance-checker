@@ -15,7 +15,13 @@ echo "════════════════════════�
 echo ""
 echo "▶ Starting Docker infrastructure (Qdrant + Postgres)..."
 cd "$REPO_DIR"
-docker compose up -d
+
+# Support both Docker Compose V1 (docker-compose) and V2 (docker compose)
+if docker compose version &>/dev/null 2>&1; then
+  docker compose up -d
+else
+  docker-compose up -d
+fi
 echo "✓ Docker services running (restart policy: unless-stopped)"
 
 # ── 2. Install / refresh systemd service files ──────────────────────────────
