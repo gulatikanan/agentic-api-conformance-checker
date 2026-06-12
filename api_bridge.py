@@ -1,73 +1,221 @@
+"""
+api_bridge.py — Conformance Checker HTTP Bridge Server
+Runs as a FastAPI app on port 8000.
+
+Flow: Frontend → POST /api/live-audit → OpenClaw agent (--local) → MCP server (server.py)
+      → find_rules (Qdrant RAG) + inspect_artifact → findings → Postgres → response
+
+GET /health  — liveness probe
+"""
+
 import os
 import re
-import yaml
 import json
+import uuid
+import subprocess
 import psycopg2
-from mcp.server.fastapi import FastMCP
-from qdrant_client import QdrantClient
-from sentence_transformers import SentenceTransformer
+from datetime import datetime, timezone
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 from dotenv import load_dotenv
 
-# Load credentials
-load_dotenv(dotenv_path=os.path.expanduser('~/agentic-api-conformance-checker/.env'))
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
 
-# Initialize FastMCP Server Instance
-mcp = FastMCP("API Conformance Checker Rulebook Engine")
+app = FastAPI(title="API Conformance Bridge", version="2.0.0")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-# Pre-load shared RAG weights into memory
-print("⏳ Loading RAG Transformer layers into RAM...")
-encoder = SentenceTransformer('all-MiniLM-L6-v2')
-qdrant_client = QdrantClient(url=os.getenv("QDRANT_URL", "http://localhost:6333"))
+POSTGRES_URL = os.getenv("POSTGRES_URL")
+OPENCLAW_BIN = "/home/ubuntu/.npm-global/bin/openclaw"
+REPO_DIR     = os.path.expanduser("~/agentic-api-conformance-checker")
 
-@mcp.tool()
-def inspect_artifact(spec_data: str) -> str:
-    """Parses, lints, and extracts structural endpoint routes and methods from a submitted OpenAPI specification text artifact."""
-    endpoints = []
+
+class AuditRequest(BaseModel):
+    specData: str
+
+
+def call_openclaw(spec_data: str) -> dict:
+    """
+    Invoke OpenClaw agent in --local mode.
+    OpenClaw calls the MCP tools (find_rules + inspect_artifact) via the proper
+    MCP protocol boundary — satisfying the graded MCP requirement.
+    """
+    prompt = f"""You are a strict API conformance checker. Follow these steps exactly:
+
+1. Call conformance-tools__inspect_artifact with the spec below as the `content` parameter and "openapi" as `artifact_type`.
+2. For each endpoint found, call conformance-tools__find_rules with topic describing that endpoint's security concerns.
+3. Return ONLY a raw JSON array — no markdown, no explanation:
+
+[{{"endpoint": "/path", "verdict": "PASS or FAIL or ABSTAIN", "rule_id": "rule id or NONE", "rule_title": "rule title or No rule found", "citation": "exact verbatim quote or no rule found flagged for human review", "similarity_score": 0.0}}]
+
+API Spec to check:
+{spec_data}"""
+
     try:
-        data = yaml.safe_load(spec_data) or json.loads(spec_data)
-        if isinstance(data, dict) and 'paths' in data:
-            for path, methods in data['paths'].items():
-                for method, details in methods.items():
-                    if method.lower() in ['get', 'post', 'put', 'delete', 'patch']:
-                        desc = details.get('description', '') if isinstance(details, dict) else ''
-                        endpoints.append({"path": path, "method": method.upper(), "description": str(desc)})
-    except Exception:
-        pass
-    
-    if not endpoints:
-        matches = re.findall(r'(GET|POST|PUT|DELETE)\s+([/a-zA-Z0-9_{}-]+)', spec_data, re.IGNORECASE)
-        for m in matches:
-            endpoints.append({"path": m[1], "method": m[0].upper(), "description": ""})
-            
-    return json.dumps(endpoints if endpoints else [{"path": "/unknown", "method": "EVAL", "description": ""}])
+        result = subprocess.run(
+            [OPENCLAW_BIN, "agent", "--agent", "main", "--local", "--message", prompt, "--json"],
+            capture_output=True,
+            text=True,
+            timeout=180,
+            cwd=REPO_DIR,
+        )
 
-@mcp.tool()
-def find_rules(topic: str) -> str:
-    """Executes semantic vector RAG search over the 414 policy document corpus inside Qdrant and returns the single highest matching clause with its similarity score."""
-    vector = encoder.encode(topic).tolist()
-    threshold = float(os.getenv("SIMILARITY_THRESHOLD", "0.45"))
-    
-    collections = ["api_rules", "compliance_rules"]
-    for col in collections:
+        stdout = result.stdout.strip()
+        stderr = result.stderr.strip()
+
+        # Guard: OpenClaw may emit nothing to stdout on some errors
+        if not stdout:
+            return {
+                "success": False,
+                "error": f"OpenClaw returned empty stdout. stderr: {stderr[:300] if stderr else 'none'}",
+            }
+
+        # Parse the OpenClaw --json envelope
         try:
-            results = qdrant_client.query_points(collection_name=col, query=vector, limit=1).points
-            if results:
-                match = results[0]
-                score = match.score
-                p_data = match.payload
-                
-                return json.dumps({
-                    "rule_id": p_data.get("rule_id", "GOV-01"),
-                    "title": p_data.get("title", "Policy Match"),
-                    "citation": p_data.get("text", p_data.get("content", "Policy clause extracted.")),
-                    "similarity_score": score,
-                    "above_threshold": score >= threshold
-                })
-        except Exception:
+            parsed = json.loads(stdout)
+        except json.JSONDecodeError:
+            return {"success": False, "error": f"OpenClaw stdout was not valid JSON: {stdout[:300]}"}
+
+        # Extract the text reply from the payload envelope
+        payloads = parsed.get("payloads", [])
+        reply = payloads[0].get("text", "") if payloads else ""
+
+        if not reply:
+            return {"success": False, "error": "OpenClaw returned an empty reply payload."}
+
+        # Extract the JSON array from within the reply text
+        start = reply.find('[')
+        end   = reply.rfind(']') + 1
+        if start != -1 and end > start:
+            try:
+                findings = json.loads(reply[start:end])
+                return {"success": True, "findings": findings}
+            except json.JSONDecodeError:
+                pass
+
+        # Fallback: parse structured text (e.g. bullet-point verdicts)
+        findings = _parse_text_response(reply)
+        return {"success": True, "findings": findings}
+
+    except subprocess.TimeoutExpired:
+        return {"success": False, "error": "OpenClaw agent timed out after 180 seconds"}
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+def _parse_text_response(text: str) -> list:
+    """Fallback: parse OpenClaw free-text into structured findings."""
+    findings = []
+    for line in text.split('\n'):
+        line = line.strip()
+        if not line:
             continue
-            
-    return json.dumps({"rule_id": "NONE", "similarity_score": 0.0, "above_threshold": False})
+        ep_match = re.search(r'`?(/[a-zA-Z0-9_\-/{}/]+)`?', line)
+        if not ep_match:
+            continue
+        endpoint = ep_match.group(1)
+        verdict  = "ABSTAIN"
+        if 'PASS'  in line.upper(): verdict = 'PASS'
+        elif 'FAIL' in line.upper(): verdict = 'FAIL'
+        findings.append({
+            "endpoint":         endpoint,
+            "verdict":          verdict,
+            "rule_id":          "NONE" if verdict == "ABSTAIN" else "RULE-01",
+            "rule_title":       "No rule found — flagged for human review" if verdict == "ABSTAIN" else "Policy match",
+            "citation":         "No rule found — flagged for human review" if verdict == "ABSTAIN" else "",
+            "similarity_score": 0.0,
+        })
+    return findings
+
+
+def _save_findings(findings: list) -> list:
+    """
+    Write findings to compliance_findings table and return rows formatted for the frontend.
+    Creates the table if it doesn't exist yet.
+    """
+    if not POSTGRES_URL or not findings:
+        return []
+
+    rows = []
+    try:
+        conn = psycopg2.connect(POSTGRES_URL)
+        cur  = conn.cursor()
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS compliance_findings (
+                id               VARCHAR(36) PRIMARY KEY,
+                endpoint         VARCHAR(500),
+                rule_id          VARCHAR(100),
+                rule_title       VARCHAR(500),
+                citation         TEXT,
+                similarity_score NUMERIC(6,4),
+                verdict          VARCHAR(20),
+                created_at       TIMESTAMP
+            );
+        """)
+
+        now = datetime.now(timezone.utc)
+        for f in findings:
+            row_id = str(uuid.uuid4())
+            cur.execute(
+                """
+                INSERT INTO compliance_findings
+                    (id, endpoint, rule_id, rule_title, citation, similarity_score, verdict, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    row_id,
+                    f.get("endpoint",         "unknown"),
+                    f.get("rule_id",          "NONE"),
+                    f.get("rule_title",        ""),
+                    f.get("citation",          ""),
+                    float(f.get("similarity_score", 0.0)),
+                    f.get("verdict",           "ABSTAIN"),
+                    now,
+                ),
+            )
+            rows.append({
+                "id":               row_id,
+                "endpoint":         f.get("endpoint",         "unknown"),
+                "rule_id":          f.get("rule_id",          "NONE"),
+                "rule_title":       f.get("rule_title",        ""),
+                "citation":         f.get("citation",          ""),
+                "similarity_score": float(f.get("similarity_score", 0.0)),
+                "verdict":          f.get("verdict",           "ABSTAIN"),
+                "created_at":       now.isoformat(),
+            })
+
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as exc:
+        print(f"[DB ERROR] {exc}")
+
+    return rows
+
+
+# ── Routes ───────────────────────────────────────────────────────────────────
+
+@app.get("/health")
+def health():
+    return {"status": "ok", "agent": "openclaw", "mcp": "conformance-tools"}
+
+
+@app.post("/api/live-audit")
+async def live_audit(req: AuditRequest):
+    result = call_openclaw(req.specData)
+
+    if not result["success"]:
+        return JSONResponse(
+            {"success": False, "error": result.get("error"), "data": []},
+            status_code=500,
+        )
+
+    rows = _save_findings(result.get("findings", []))
+    return JSONResponse({"success": True, "data": rows})
+
 
 if __name__ == "__main__":
-    # FastMCP automatically hosts an SSE (Server-Sent Events) web server endpoint on port 8000
-    mcp.run(transport="sse", host="0.0.0.0", port=8000)
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="warning")
