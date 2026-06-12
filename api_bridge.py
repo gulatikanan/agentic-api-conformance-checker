@@ -57,6 +57,15 @@ API Spec to check:
 {spec_data}"""
 
     try:
+        # Prevent context window bloat (130k+ tokens) by wiping session history before each run
+        import shutil
+        session_dir = os.path.expanduser("~/.openclaw/agents/main/sessions")
+        if os.path.exists(session_dir):
+            try:
+                shutil.rmtree(session_dir)
+            except Exception:
+                pass
+
         result = subprocess.run(
             [OPENCLAW_BIN, "agent", "--agent", "main", "--local",
              "--message", prompt, "--json"],
