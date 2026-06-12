@@ -21,7 +21,21 @@ interface LogLine {
 
 export default function Workspace() {
   const [data, setData] = useState<AuditFinding[]>([]);
-  const [specData, setSpecData] = useState('');
+  
+  // Pre-hydrate the text box state with the interactive demo template as a real value
+  const [specData, setSpecData] = useState(`openapi: 3.0.0
+info:
+  title: Retail Banking Core API
+  version: 1.0.0
+paths:
+  /v1/accounts/{id}:
+    get:
+      summary: Retrieve account balance and owner details
+      description: Returns sensitive financial records.
+  /health:
+    get:
+      summary: Basic container heartbeat check`);
+
   const [loading, setLoading] = useState(false);
   const [dbStatus, setDbStatus] = useState('CONNECTING...');
   const [logs, setLogs] = useState<LogLine[]>([
@@ -42,12 +56,10 @@ export default function Workspace() {
       .catch(() => setDbStatus('OFFLINE'));
   }, []);
 
-  // Helper to generate formatted real-time timestamp sequences
   const time = () => new Date().toLocaleTimeString();
 
   const runLogSequence = async () => {
-    setLogs([]); // Clear logs for new run
-    
+    setLogs([]);
     const sequence: Omit<LogLine, 'timestamp'>[] = [
       { text: 'INITIALIZING OPENCLAW CONFORMANCE RUNTIME...', type: 'system' },
       { text: 'MCP -> Spawning Python FastMCP server background subprocess via stdio channel', type: 'mcp' },
@@ -60,9 +72,8 @@ export default function Workspace() {
       { text: 'COMPLETED -> Execution frame dispatched to presentation UI channel cleanly', type: 'system' }
     ];
 
-    // Progressively push logs to the UI terminal block simulating network streams
     for (let i = 0; i < sequence.length; i++) {
-      await new Promise((resolve) => setTimeout(resolve, 450 + Math.random() * 300));
+      await new Promise((resolve) => setTimeout(resolve, 400 + Math.random() * 200));
       setLogs((prev) => [...prev, { ...sequence[i], timestamp: time() }]);
     }
   };
@@ -70,8 +81,6 @@ export default function Workspace() {
   const handleAuditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    
-    // Fire off the dynamic terminal log pipeline simulation immediately
     runLogSequence();
 
     try {
@@ -83,11 +92,10 @@ export default function Workspace() {
       const result = await response.json();
       
       if (result.success) {
-        // Hold slightly to let the gorgeous logs finish playing perfectly
         setTimeout(() => {
           setData(result.data);
           setLoading(false);
-        }, 3200);
+        }, 2800);
       } else {
         alert(`Database execution error: ${result.error}`);
         setLoading(false);
@@ -105,7 +113,6 @@ export default function Workspace() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-6 md:p-10 font-sans">
-      {/* Header Container */}
       <div className="max-w-7xl mx-auto mb-8 flex flex-col md:flex-row justify-between items-start md:items-center border-b border-slate-800 pb-6 gap-4">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-white flex items-center gap-2">
@@ -124,7 +131,6 @@ export default function Workspace() {
       </div>
 
       <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* LEFT COLUMN */}
         <div className="lg:col-span-1 space-y-6">
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg space-y-4">
             <div>
@@ -140,7 +146,6 @@ export default function Workspace() {
                   onChange={(e) => setSpecData(e.target.value)}
                   rows={12}
                   className="w-full bg-transparent text-emerald-400 focus:outline-none p-2 resize-none leading-relaxed"
-                  placeholder={`openapi: 3.0.0\ninfo:\n  title: Core Accounts API\npaths:\n  /v1/accounts/{id}:\n    get:\n      summary: Fetch profile information\n  /health:\n    get:\n      summary: System status`}
                 />
               </div>
 
@@ -156,7 +161,6 @@ export default function Workspace() {
             </form>
           </div>
 
-          {/* DYNAMIC TERMINAL MONITOR BOX */}
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg space-y-3 font-mono text-xs">
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 font-sans">MCP Server Handshake Log</h3>
             <div className="space-y-2 text-[11px] leading-relaxed bg-slate-950 p-3 rounded-lg border border-slate-850 h-52 overflow-y-auto shadow-inner flex flex-col justify-end">
@@ -174,7 +178,6 @@ export default function Workspace() {
           </div>
         </div>
 
-        {/* RIGHT COLUMN */}
         <div className="lg:col-span-2 space-y-6">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl shadow-md text-center">
