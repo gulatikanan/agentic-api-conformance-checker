@@ -66,14 +66,19 @@ API Spec to check:
         
         session_id = f"audit_{uuid.uuid4().hex[:8]}"
 
+        custom_env = os.environ.copy()
+        custom_env["LLM_PROVIDER"] = "gemini"
+        custom_env["GEMINI_MODEL"] = "google/gemini-1.5-flash"
+
         result = subprocess.run(
-            [OPENCLAW_BIN, "agent", "--agent", "audit_expert", "--local",
+            [OPENCLAW_BIN, "agent", "--agent", "main", "--local",
              "--session-id", session_id,
              "--message", prompt, "--json"],
             stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,   # merge stderr into stdout — identical to 2>&1
+            stderr=subprocess.STDOUT,
             text=True,
             timeout=180,
+            env=custom_env,
         )
 
         combined = result.stdout.strip()
