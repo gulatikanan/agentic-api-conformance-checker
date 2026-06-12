@@ -85,11 +85,11 @@ API Spec to check:
         else:
             ocl_cfg = {}
         
-        # Patch only the LLM section — leave all other settings intact
-        ocl_cfg.setdefault("llm", {})
-        ocl_cfg["llm"]["provider"] = "gemini"
-        ocl_cfg["llm"]["model"] = "google/gemini-1.5-flash"
-        ocl_cfg["llm"]["apiKey"] = custom_env.get("GEMINI_API_KEY", "")
+        # Patch the correct path: agents.defaults.model (confirmed from openclaw.json structure)
+        ocl_cfg.setdefault("agents", {}).setdefault("defaults", {})["model"] = {
+            "primary": "google/gemini-1.5-flash",
+            "fallbacks": ["google/gemini-1.5-flash"]
+        }
         
         with open(openclaw_json_path, "w") as f:
             json.dump(ocl_cfg, f, indent=2)
