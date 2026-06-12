@@ -54,7 +54,9 @@ API Spec to check:
 
     try:
         result = subprocess.run(
-            [OPENCLAW_BIN, "agent", "--agent", "main", "--local", "--message", prompt, "--json"],
+            [OPENCLAW_BIN, "agent", "--agent", "main", "--local",
+             "--model", "google/gemini-2.5-flash",
+             "--message", prompt, "--json"],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,   # merge stderr into stdout — identical to 2>&1
             text=True,
