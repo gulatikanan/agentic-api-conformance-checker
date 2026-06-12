@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server';
 import { Pool } from 'pg';
 
+// Explicitly set ssl: false since our AWS Docker container uses standard TCP connections
 const pool = new Pool({
   connectionString: process.env.POSTGRES_URL,
-  ssl: process.env.POSTGRES_URL?.includes('vercel') || process.env.POSTGRES_URL?.includes('13.60')
-    ? { rejectUnauthorized: false }
-    : false,
+  ssl: false,
 });
 
 export async function GET() {
