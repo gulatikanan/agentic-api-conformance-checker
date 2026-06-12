@@ -67,8 +67,7 @@ API Spec to check:
         session_id = f"audit_{uuid.uuid4().hex[:8]}"
 
         result = subprocess.run(
-            [OPENCLAW_BIN, "agent", "--agent", "main", "--local",
-             "--model", "google/gemini-1.5-flash",
+            [OPENCLAW_BIN, "agent", "--agent", "main",
              "--session-id", session_id,
              "--message", prompt, "--json"],
             stdout=subprocess.PIPE,
