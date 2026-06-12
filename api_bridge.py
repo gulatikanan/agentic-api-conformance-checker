@@ -68,7 +68,12 @@ API Spec to check:
 
         custom_env = os.environ.copy()
         custom_env["LLM_PROVIDER"] = "gemini"
-        custom_env["GEMINI_MODEL"] = "google/gemini-1.5-flash"
+        custom_env["GEMINI_MODEL"] = "google/gemini-2.5-flash"
+        # Pass the key under every env var name OpenClaw might look for
+        gemini_key = os.getenv("GEMINI_API_KEY", os.getenv("GOOGLE_API_KEY", ""))
+        custom_env["GEMINI_API_KEY"] = gemini_key
+        custom_env["GOOGLE_API_KEY"] = gemini_key
+        custom_env["GOOGLE_GENERATIVE_AI_API_KEY"] = gemini_key
         
         # Delete the entire sessions directory to eliminate the 130k token history
         import shutil
