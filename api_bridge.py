@@ -69,6 +69,18 @@ API Spec to check:
         custom_env = os.environ.copy()
         custom_env["LLM_PROVIDER"] = "gemini"
         custom_env["GEMINI_MODEL"] = "google/gemini-1.5-flash"
+        
+        # Aggressively force the global OpenClaw configuration to Gemini to bypass Groq caching
+        global_config_path = "/home/ubuntu/.openclaw/config.json"
+        os.makedirs(os.path.dirname(global_config_path), exist_ok=True)
+        with open(global_config_path, "w") as f:
+            json.dump({
+                "llm": {
+                    "provider": "gemini",
+                    "model": "google/gemini-1.5-flash",
+                    "apiKey": custom_env.get("GEMINI_API_KEY", "")
+                }
+            }, f)
 
         result = subprocess.run(
             [OPENCLAW_BIN, "agent", "--agent", "main", "--local",
