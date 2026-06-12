@@ -21,20 +21,20 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
 
-    // 🌐 CRITICAL WIRING: Direct data routing straight to your true live AWS Python RAG Server!
-    const pythonEngineResponse = await fetch('http://13.60.45.176:18789/api/live-audit', {
+    const pythonEngineResponse = await fetch('http://13.60.45.176:8000/api/live-audit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ specData: body.specData }),
     });
 
-    await pythonEngineResponse.json();
+    const auditResult = await pythonEngineResponse.json();
 
-    // Fetch the real-time calculated rows out of your shared Postgres Instance to update the UI
-    const res = await pool.query(
-      'SELECT id, endpoint, rule_id, rule_title, citation, similarity_score, verdict, created_at FROM compliance_findings ORDER BY created_at DESC LIMIT 50'
-    );
-    return NextResponse.json({ success: true, data: res.rows });
+    if (!auditResult.success) {
+      return NextResponse.json({ success: false, error: auditResult.error });
+    }
+
+    return NextResponse.json({ success: true, data: auditResult.data });
+
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message });
   }
