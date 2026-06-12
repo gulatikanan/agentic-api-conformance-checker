@@ -26,9 +26,13 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(os.path.abspath(__file__)),
 app = FastAPI(title="API Conformance Bridge", version="2.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-POSTGRES_URL = os.getenv("POSTGRES_URL")
-OPENCLAW_BIN = "/home/ubuntu/.npm-global/bin/openclaw"
-REPO_DIR     = os.path.expanduser("~/agentic-api-conformance-checker")
+POSTGRES_URL  = os.getenv("POSTGRES_URL")
+OPENCLAW_BIN  = "/home/ubuntu/.npm-global/bin/openclaw"
+REPO_DIR      = os.path.expanduser("~/agentic-api-conformance-checker")
+# Read from .env — change GEMINI_MODEL there to switch models, no code edits needed
+LLM_PROVIDER  = os.getenv("LLM_PROVIDER", "google")
+GEMINI_MODEL  = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+OPENCLAW_MODEL = f"{LLM_PROVIDER}/{GEMINI_MODEL}"
 
 
 class AuditRequest(BaseModel):
@@ -55,7 +59,7 @@ API Spec to check:
     try:
         result = subprocess.run(
             [OPENCLAW_BIN, "agent", "--agent", "main", "--local",
-             "--model", "google/gemini-2.5-flash",
+             "--model", OPENCLAW_MODEL,
              "--message", prompt, "--json"],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,   # merge stderr into stdout — identical to 2>&1
