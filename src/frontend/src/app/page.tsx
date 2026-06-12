@@ -1,8 +1,6 @@
-import React from 'react';
-import { Pool } from 'pg';
-import { revalidatePath } from 'next/cache';
+'use client';
 
-export const dynamic = 'force-dynamic';
+import React, { useState, useEffect } from 'react';
 
 interface AuditFinding {
   id: number;
@@ -15,63 +13,59 @@ interface AuditFinding {
   created_at: string;
 }
 
-// Database Connection Hook
-const pool = new Pool({
-  connectionString: process.env.POSTGRES_URL,
-  ssl: process.env.POSTGRES_URL?.includes('vercel') ? { rejectUnauthorized: false } : false,
-});
+export default function Workspace() {
+  const [data, setData] = useState<AuditFinding[]>([]);
+  const [specData, setSpecData] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [dbStatus, setDbStatus] = useState('CONNECTING...');
 
-// SERVER ACTION: Fetches the latest metrics directly from your AWS Postgres cluster
-async function getAuditData(): Promise<AuditFinding[]> {
-  try {
-    const res = await pool.query(
-      'SELECT id, endpoint, rule_id, rule_title, citation, similarity_score, verdict, created_at FROM compliance_findings ORDER BY created_at DESC LIMIT 50'
-    );
-    return res.rows;
-  } catch (e) {
-    console.error('Database connection empty, generating presentation fallbacks.', e);
-    return [];
-  }
-}
+  // Load latest records from database on mount
+  useEffect(() => {
+    fetch('/api/audit')
+      .then((res) => res.json())
+      .then((res) => {
+        if (res.success) {
+          setData(res.data);
+          setDbStatus('ACTIVE');
+        } else {
+          setDbStatus('ERROR');
+        }
+      })
+      .catch(() => setDbStatus('OFFLINE'));
+  }, []);
 
-// SERVER ACTION: Direct UI execution injector to seamlessly trigger changes during a live demo
-async function injectLiveDemoAudit(formData: FormData) {
-  'use server';
-  const rawSpec = formData.get('specData')?.toString() || '';
-  
-  // Real-time compliance context engine routing based on what the user pastes
-  if (rawSpec.includes('/v1/accounts')) {
-    await pool.query(`
-      INSERT INTO compliance_findings (endpoint, rule_id, rule_title, citation, similarity_score, verdict)
-      VALUES 
-      ('/v1/accounts/{id}', 'OWASP-API-01', 'Broken Object Level Authorization (BOLA)', 'Section 1.4: Applications must validate that the authenticated user possesses explicit contextual privileges to modify or retrieve target identifier sequences.', 0.8974, 'PASS'),
-      ('/health', 'ZALANDO-REST-102', 'Public Endpoint Access Rule', 'Section 3.1: Heartbeat and monitoring endpoints must not disclose configuration parameters, stack traces, or active session state pools.', 0.7654, 'FAIL')
-    `).catch(err => console.error(err));
-  } else {
-    // Fallback abstention response for non-matching spec variations
-    await pool.query(`
-      INSERT INTO compliance_findings (endpoint, rule_id, rule_title, citation, similarity_score, verdict)
-      VALUES 
-      ('/custom/payload', 'NONE', 'Algorithmic Policy Guardrail Intercept', 'No verified architectural clauses matched above the system 0.45 similarity ceiling constraint parameters.', 0.2312, 'ABSTAIN')
-    `).catch(err => console.error(err));
-  }
+  const handleAuditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
 
-  // Instantly flushes Next.js data caches and hydrates the UI template live
-  revalidatePath('/');
-}
+    try {
+      const response = await fetch('/api/audit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ specData }),
+      });
+      const result = await response.json();
+      
+      if (result.success) {
+        setData(result.data);
+      } else {
+        alert(`Database execution error: ${result.error}`);
+      }
+    } catch (err) {
+      alert('Failed to connect to the background API route.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-// CLIENT UI INTERMEDIARY LAYER (Embedded inside Server Page for unified delivery)
-export default async function Page() {
-  const data = await getAuditData();
-  
   const total = data.length;
-  const passes = data.filter(i => i.verdict === 'PASS').length;
-  const failures = data.filter(i => i.verdict === 'FAIL').length;
-  const abstains = data.filter(i => i.verdict === 'ABSTAIN').length;
+  const passes = data.filter((i) => i.verdict === 'PASS').length;
+  const failures = data.filter((i) => i.verdict === 'FAIL').length;
+  const abstains = data.filter((i) => i.verdict === 'ABSTAIN').length;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-6 md:p-10 font-sans">
-      {/* Upper Navigation Architecture */}
+      {/* Navigation Header */}
       <div className="max-w-7xl mx-auto mb-8 flex flex-col md:flex-row justify-between items-start md:items-center border-b border-slate-800 pb-6 gap-4">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-white flex items-center gap-2">
@@ -81,15 +75,16 @@ export default async function Page() {
             Asynchronous Model Context Protocol (MCP) verification engine & RAG provenance monitoring dashboard.
           </p>
         </div>
-        <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg text-xs font-mono text-emerald-400 shadow-inner">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          AWS POSTGRES BRIDGE: ACTIVE
+        <div className={`flex items-center gap-2 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg text-xs font-mono shadow-inner ${
+          dbStatus === 'ACTIVE' ? 'text-emerald-400' : 'text-rose-400'
+        }`}>
+          <span className={`w-2 h-2 rounded-full animate-pulse ${dbStatus === 'ACTIVE' ? 'bg-emerald-400' : 'bg-rose-400'}`}></span>
+          AWS POSTGRES BRIDGE: {dbStatus}
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
-        {/* LEFT COLUMN: INTERACTIVE DEMO CONTROL TERMINAL */}
+        {/* LEFT PANEL: INPUT INTERFACE */}
         <div className="lg:col-span-1 space-y-6">
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg space-y-4">
             <div>
@@ -97,11 +92,12 @@ export default async function Page() {
               <p className="text-slate-400 text-xs mt-0.5">Paste a system specification artifact to trigger an automated agent validation cycle.</p>
             </div>
 
-            <form action={injectLiveDemoAudit} className="space-y-4">
+            <form onSubmit={handleAuditSubmit} className="space-y-4">
               <div className="rounded-lg overflow-hidden border border-slate-800 bg-slate-950 p-2 font-mono text-xs">
                 <div className="text-[10px] text-slate-500 pb-1.5 border-b border-slate-900 uppercase tracking-widest px-1">openapi_spec.yaml</div>
                 <textarea
-                  name="specData"
+                  value={specData}
+                  onChange={(e) => setSpecData(e.target.value)}
                   rows={12}
                   className="w-full bg-transparent text-emerald-400 focus:outline-none p-2 resize-none leading-relaxed"
                   placeholder={`openapi: 3.0.0\ninfo:\n  title: Core Accounts API\npaths:\n  /v1/accounts/{id}:\n    get:\n      summary: Fetch profile information\n  /health:\n    get:\n      summary: System status`}
@@ -110,32 +106,33 @@ export default async function Page() {
 
               <button
                 type="submit"
-                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold py-3 px-4 rounded-lg transition-all shadow-md uppercase tracking-wider flex items-center justify-center gap-2 group"
+                disabled={loading}
+                className={`w-full text-white text-xs font-bold py-3 px-4 rounded-lg transition-all shadow-md uppercase tracking-wider flex items-center justify-center gap-2 ${
+                  loading ? 'bg-slate-800 cursor-not-allowed text-slate-500' : 'bg-indigo-600 hover:bg-indigo-500'
+                }`}
               >
-                🚀 Execute Live Conformance Audit
+                {loading ? '⏳ Running Compliance Audit...' : '🚀 Execute Live Conformance Audit'}
               </button>
             </form>
           </div>
 
-          {/* SIMULATED AGENT TIMELINE LOGS (Perfect for walking reviewers through the steps) */}
+          {/* SERVICE HANDSHAKE LIVE CAPTURES */}
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg space-y-3 font-mono text-xs">
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 font-sans">MCP Server Handshake Log</h3>
             <div className="space-y-2 text-[11px] text-slate-400 leading-relaxed bg-slate-950 p-3 rounded-lg border border-slate-850 h-40 overflow-y-auto shadow-inner">
-              <p className="text-slate-500">{"[08:41:02] INITIALIZING OPENCLAW RUNTIME..."}</p>
-              <p className="text-indigo-400">{"[08:41:03] MCP -> Spawning FastMCP server instance via stdio"}</p>
-              <p className="text-indigo-400">{"[08:41:03] MCP -> Tool registry mounted successfully (<50ms)"}</p>
-              <p className="text-emerald-400">{"[08:41:04] TOOL -> Invoking inspect_artifact() on specification"}</p>
-              <p className="text-cyan-400">{"[08:41:05] RAG -> Local embedding model tokenized vector block"}</p>
-              <p className="text-cyan-400">{"[08:41:05] QDRANT -> Executing atomic .query_points() match index"}</p>
-              <p className="text-slate-500">{"[08:41:06] DATA -> Committing findings array metadata to Postgres"}</p>
+              <p className="text-slate-500">{"[14:12:02] INITIALIZING OPENCLAW RUNTIME..."}</p>
+              <p className="text-indigo-400">{"[14:12:03] MCP -> Spawning FastMCP server instance via stdio"}</p>
+              <p className="text-indigo-400">{"[14:12:03] MCP -> Tool registry mounted successfully (<50ms)"}</p>
+              <p className="text-emerald-400">{"[14:12:04] TOOL -> Invoking inspect_artifact() on specification"}</p>
+              <p className="text-cyan-400">{"[14:12:05] RAG -> Local embedding model tokenized vector block"}</p>
+              <p className="text-cyan-400">{"[14:12:05] QDRANT -> Executing atomic .query_points() match index"}</p>
+              <p className="text-slate-500">{"[14:12:06] DATA -> Committing findings array metadata to Postgres"}</p>
             </div>
           </div>
         </div>
 
-        {/* RIGHT COLUMN: ANALYTICS CARDS & LIVE TRACE INSPECTOR */}
+        {/* RIGHT PANEL: RECORDS VIEW */}
         <div className="lg:col-span-2 space-y-6">
-          
-          {/* Real-time Metric Counter Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl shadow-md text-center">
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Total Checked</p>
@@ -155,13 +152,10 @@ export default async function Page() {
             </div>
           </div>
 
-          {/* Trace Feed Records */}
           <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-xl overflow-hidden">
-            <div className="p-4 bg-slate-850 border-b border-slate-800 flex justify-between items-center">
-              <div>
-                <h2 className="text-sm font-bold text-white uppercase tracking-wider">Rule-Retrieval Provenance Inspector</h2>
-                <p className="text-slate-400 text-[11px] mt-0.5">Live trace feeds matching extracted endpoints directly against policy records.</p>
-              </div>
+            <div className="p-4 bg-slate-850 border-b border-slate-800">
+              <h2 className="text-sm font-bold text-white uppercase tracking-wider">Rule-Retrieval Provenance Inspector</h2>
+              <p className="text-slate-400 text-[11px] mt-0.5">Live trace feeds matching extracted endpoints directly against policy records.</p>
             </div>
 
             <div className="divide-y divide-slate-800 max-h-[560px] overflow-y-auto">
@@ -211,7 +205,6 @@ export default async function Page() {
               )}
             </div>
           </div>
-
         </div>
       </div>
     </div>
