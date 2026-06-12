@@ -73,7 +73,6 @@ API Spec to check:
             stderr=subprocess.STDOUT,   # merge stderr into stdout — identical to 2>&1
             text=True,
             timeout=180,
-            cwd="/tmp",
         )
 
         combined = result.stdout.strip()

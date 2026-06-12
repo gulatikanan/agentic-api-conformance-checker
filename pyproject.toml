@@ -13,4 +13,6 @@ dependencies = [
     "sentence-transformers>=3.0.1",
     "pyyaml>=6.0.1",
     "psycopg2-binary>=2.9.9",
+    "fastapi>=0.111.0",
+    "uvicorn>=0.29.0",
 ]
