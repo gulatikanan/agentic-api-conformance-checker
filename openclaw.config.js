@@ -19,7 +19,7 @@ module.exports = {
 
   // 🎭 Cognitive Prompts & Behavioral Rule Injection
   agent: {
-    name: 'main',
+    name: 'audit_expert',
     identity: './src/agent/IDENTITY.md',
     soul: './src/agent/SOUL.md',
     strategy: './src/agent/AGENTS.md',

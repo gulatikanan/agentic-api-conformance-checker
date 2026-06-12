@@ -67,7 +67,7 @@ API Spec to check:
         session_id = f"audit_{uuid.uuid4().hex[:8]}"
 
         result = subprocess.run(
-            [OPENCLAW_BIN, "agent", "--agent", "main",
+            [OPENCLAW_BIN, "agent", "--agent", "audit_expert",
              "--session-id", session_id,
              "--message", prompt, "--json"],
             stdout=subprocess.PIPE,
