@@ -55,31 +55,42 @@ API Spec to check:
     try:
         result = subprocess.run(
             [OPENCLAW_BIN, "agent", "--agent", "main", "--local", "--message", prompt, "--json"],
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,   # merge stderr into stdout — identical to 2>&1
             text=True,
             timeout=180,
             cwd=REPO_DIR,
         )
 
-        stdout = result.stdout.strip()
-        stderr = result.stderr.strip()
+        combined = result.stdout.strip()
 
-        # Guard: OpenClaw may emit nothing to stdout on some errors
-        if not stdout:
+        # Search for the OpenClaw JSON envelope inside the combined output.
+        # ANSI-coloured diagnostic lines appear before/after it; we find the object by braces.
+        json_start = combined.find('{"payloads"')
+        if json_start == -1:
+            json_start = combined.find('{')
+        json_end = combined.rfind('}') + 1
+
+        if json_start == -1 or json_end <= json_start:
             return {
                 "success": False,
-                "error": f"OpenClaw returned empty stdout. stderr: {stderr[:300] if stderr else 'none'}",
+                "error": f"No JSON found in OpenClaw output: {combined[:400]}",
             }
 
-        # Parse the OpenClaw --json envelope
+        json_str = combined[json_start:json_end]
+
         try:
-            parsed = json.loads(stdout)
+            parsed = json.loads(json_str)
         except json.JSONDecodeError:
-            return {"success": False, "error": f"OpenClaw stdout was not valid JSON: {stdout[:300]}"}
+            return {"success": False, "error": f"Could not parse OpenClaw JSON: {json_str[:300]}"}
+
+        # If OpenClaw signals an error inside the envelope, surface it clearly
+        if parsed.get("error") or parsed.get("isError"):
+            return {"success": False, "error": f"OpenClaw agent error: {parsed.get('error', parsed.get('message', combined[:200]))}"}
 
         # Extract the text reply from the payload envelope
         payloads = parsed.get("payloads", [])
-        reply = payloads[0].get("text", "") if payloads else ""
+        reply    = payloads[0].get("text", "") if payloads else ""
 
         if not reply:
             return {"success": False, "error": "OpenClaw returned an empty reply payload."}
