@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { Pool } from 'pg';
 
-// Explicitly set ssl: false since our AWS Docker container uses standard TCP connections
 const pool = new Pool({
   connectionString: process.env.POSTGRES_URL,
   ssl: false,
@@ -14,7 +13,6 @@ export async function GET() {
     );
     return NextResponse.json({ success: true, data: res.rows });
   } catch (error: any) {
-    console.error('API GET Database Error:', error);
     return NextResponse.json({ success: false, error: error.message, data: [] });
   }
 }
@@ -22,29 +20,22 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const rawSpec = body.specData || '';
-    
-    if (rawSpec.includes('/v1/accounts')) {
-      await pool.query(`
-        INSERT INTO compliance_findings (endpoint, rule_id, rule_title, citation, similarity_score, verdict)
-        VALUES 
-        ('/v1/accounts/{id}', 'OWASP-API-01', 'Broken Object Level Authorization (BOLA)', 'Section 1.4: Applications must validate that the authenticated user possesses explicit contextual privileges to modify or retrieve target identifier sequences.', 0.8974, 'PASS'),
-        ('/health', 'ZALANDO-REST-102', 'Public Endpoint Access Rule', 'Section 3.1: Heartbeat and monitoring endpoints must not disclose configuration parameters, stack traces, or active session state pools.', 0.7654, 'FAIL')
-      `);
-    } else {
-      await pool.query(`
-        INSERT INTO compliance_findings (endpoint, rule_id, rule_title, citation, similarity_score, verdict)
-        VALUES 
-        ('/custom/payload', 'NONE', 'Algorithmic Policy Guardrail Intercept', 'No verified architectural clauses matched above the system 0.45 similarity ceiling constraint parameters.', 0.2312, 'ABSTAIN')
-      `);
-    }
 
+    // 🌐 CRITICAL WIRING: Direct data routing straight to your true live AWS Python RAG Server!
+    const pythonEngineResponse = await fetch('http://13.60.45.176:8000/api/live-audit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ specData: body.specData }),
+    });
+
+    await pythonEngineResponse.json();
+
+    // Fetch the real-time calculated rows out of your shared Postgres Instance to update the UI
     const res = await pool.query(
       'SELECT id, endpoint, rule_id, rule_title, citation, similarity_score, verdict, created_at FROM compliance_findings ORDER BY created_at DESC LIMIT 50'
     );
     return NextResponse.json({ success: true, data: res.rows });
   } catch (error: any) {
-    console.error('API POST Database Error:', error);
     return NextResponse.json({ success: false, error: error.message });
   }
 }
