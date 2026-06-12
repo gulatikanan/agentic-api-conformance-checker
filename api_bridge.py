@@ -77,9 +77,14 @@ API Spec to check:
         json_end = combined.rfind('}') + 1
 
         if json_start == -1 or json_end <= json_start:
+            # If OpenClaw failed, it outputs key=value pairs like `error=⚠️ API rate limit...`
+            error_msg = combined
+            if "error=" in combined:
+                error_msg = combined.split("error=")[-1].strip()
+            
             return {
                 "success": False,
-                "error": f"No JSON found in OpenClaw output: {combined[:400]}",
+                "error": f"OpenClaw execution failed: {error_msg}",
             }
 
         json_str = combined[json_start:json_end]
