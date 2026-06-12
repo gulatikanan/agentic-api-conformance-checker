@@ -22,7 +22,7 @@ export async function POST(request: Request) {
     const body = await request.json();
 
     // 🌐 CRITICAL WIRING: Direct data routing straight to your true live AWS Python RAG Server!
-    const pythonEngineResponse = await fetch('http://13.60.45.176:8000/api/live-audit', {
+    const pythonEngineResponse = await fetch('http://13.60.45.176:18789/api/live-audit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ specData: body.specData }),
