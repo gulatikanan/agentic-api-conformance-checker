@@ -59,7 +59,7 @@ API Spec to check:
     try:
         # Prevent context window bloat (130k+ tokens) by wiping session history before each run
         import shutil
-        session_dir = os.path.expanduser("~/.openclaw/agents/main/sessions")
+        session_dir = "/home/ubuntu/.openclaw/agents/main/sessions"
         if os.path.exists(session_dir):
             try:
                 shutil.rmtree(session_dir)
@@ -73,7 +73,7 @@ API Spec to check:
             stderr=subprocess.STDOUT,   # merge stderr into stdout — identical to 2>&1
             text=True,
             timeout=180,
-            cwd=REPO_DIR,
+            cwd="/tmp",
         )
 
         combined = result.stdout.strip()
