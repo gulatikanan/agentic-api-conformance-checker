@@ -67,51 +67,21 @@ API Spec to check:
         
         session_id = f"audit_{uuid.uuid4().hex[:8]}"
 
+        # Forward current environment (which includes GROQ_API_KEY from .env via load_dotenv)
         custom_env = os.environ.copy()
-        custom_env["LLM_PROVIDER"] = "gemini"
-        custom_env["GEMINI_MODEL"] = "google/gemini-2.5-flash"
-        # Pass the key under every env var name OpenClaw might look for
-        gemini_key = os.getenv("GEMINI_API_KEY", os.getenv("GOOGLE_API_KEY", ""))
-        custom_env["GEMINI_API_KEY"] = gemini_key
-        custom_env["GOOGLE_API_KEY"] = gemini_key
-        custom_env["GOOGLE_GENERATIVE_AI_API_KEY"] = gemini_key
         
-        # Delete the entire sessions directory to eliminate the 130k token history
-        sessions_dir = "/home/ubuntu/.openclaw/agents/main/sessions"
-        if os.path.exists(sessions_dir):
-            shutil.rmtree(sessions_dir)
-            os.makedirs(sessions_dir, exist_ok=True)
-        
-        # Overwrite openclaw.json (the real config file OpenClaw reads) with Gemini settings
-        openclaw_json_path = "/home/ubuntu/.openclaw/openclaw.json"
-        if os.path.exists(openclaw_json_path):
-            with open(openclaw_json_path, "r") as f:
-                ocl_cfg = json.load(f)
-        else:
-            ocl_cfg = {}
-        
-        # Patch the correct path: agents.defaults.model        # Also auto-update the key in OpenClaw's SQLite credential store + clear any cooldown
+        # Clear any cached cooldown state in SQLite to prevent OpenClaw from self-throttling
         sqlite_db = "/home/ubuntu/.openclaw/agents/main/agent/openclaw-agent.sqlite"
         if os.path.exists(sqlite_db):
             try:
                 _conn = sqlite3.connect(sqlite_db)
                 _cur = _conn.cursor()
-                _new_profile = json.dumps({"version":1,"profiles":{"google:default":{"type":"api_key","provider":"google","key":gemini_key}}})
-                _cur.execute("UPDATE auth_profile_store SET store_json = ? WHERE store_key = 'primary'", (_new_profile,))
-                _clean_state = json.dumps({"version":1,"lastGood":{"google":"google:default"},"usageStats":{}})
+                _clean_state = json.dumps({"version":1,"lastGood":{},"usageStats":{}})
                 _cur.execute("UPDATE auth_profile_state SET state_json = ? WHERE state_key = 'primary'", (_clean_state,))
                 _conn.commit()
                 _conn.close()
             except Exception as _e:
-                print(f"[WARN] SQLite key patch failed: {_e}", file=sys.stderr)
-
-        ocl_cfg.setdefault("agents", {}).setdefault("defaults", {})["model"] = {
-            "primary": "google/gemini-2.5-flash",
-            "fallbacks": ["google/gemini-2.5-flash"]
-        }
-        
-        with open(openclaw_json_path, "w") as f:
-            json.dump(ocl_cfg, f, indent=2)
+                print(f"[WARN] SQLite cooldown clear failed: {_e}", file=sys.stderr)
 
         max_retries = 3
         for attempt in range(max_retries):
@@ -121,7 +91,7 @@ API Spec to check:
                     _conn = sqlite3.connect(sqlite_db)
                     _cur = _conn.cursor()
                     _cur.execute("UPDATE auth_profile_state SET state_json = ? WHERE state_key = 'primary'",
-                        (json.dumps({"version":1,"lastGood":{"google":"google:default"},"usageStats":{}}),))
+                        (json.dumps({"version":1,"lastGood":{},"usageStats":{}}),))
                     _conn.commit()
                     _conn.close()
                 except Exception:
@@ -139,7 +109,7 @@ API Spec to check:
             )
             combined = result.stdout.strip()
 
-            # Retry on 429 rate limit errors
+            # Retry on rate limit errors
             if "429" in combined or "RESOURCE_EXHAUSTED" in combined or "rate_limit" in combined.lower():
                 if attempt < max_retries - 1:
                     wait_secs = 30 * (attempt + 1)
