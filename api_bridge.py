@@ -70,17 +70,29 @@ API Spec to check:
         custom_env["LLM_PROVIDER"] = "gemini"
         custom_env["GEMINI_MODEL"] = "google/gemini-1.5-flash"
         
-        # Aggressively force the global OpenClaw configuration to Gemini to bypass Groq caching
-        global_config_path = "/home/ubuntu/.openclaw/config.json"
-        os.makedirs(os.path.dirname(global_config_path), exist_ok=True)
-        with open(global_config_path, "w") as f:
-            json.dump({
-                "llm": {
-                    "provider": "gemini",
-                    "model": "google/gemini-1.5-flash",
-                    "apiKey": custom_env.get("GEMINI_API_KEY", "")
-                }
-            }, f)
+        # Delete the entire sessions directory to eliminate the 130k token history
+        import shutil
+        sessions_dir = "/home/ubuntu/.openclaw/agents/main/sessions"
+        if os.path.exists(sessions_dir):
+            shutil.rmtree(sessions_dir)
+            os.makedirs(sessions_dir, exist_ok=True)
+        
+        # Overwrite openclaw.json (the real config file OpenClaw reads) with Gemini settings
+        openclaw_json_path = "/home/ubuntu/.openclaw/openclaw.json"
+        if os.path.exists(openclaw_json_path):
+            with open(openclaw_json_path, "r") as f:
+                ocl_cfg = json.load(f)
+        else:
+            ocl_cfg = {}
+        
+        # Patch only the LLM section — leave all other settings intact
+        ocl_cfg.setdefault("llm", {})
+        ocl_cfg["llm"]["provider"] = "gemini"
+        ocl_cfg["llm"]["model"] = "google/gemini-1.5-flash"
+        ocl_cfg["llm"]["apiKey"] = custom_env.get("GEMINI_API_KEY", "")
+        
+        with open(openclaw_json_path, "w") as f:
+            json.dump(ocl_cfg, f, indent=2)
 
         result = subprocess.run(
             [OPENCLAW_BIN, "agent", "--agent", "main", "--local",
