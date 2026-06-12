@@ -106,6 +106,10 @@ API Spec to check:
         )
 
         combined = result.stdout.strip()
+        
+        # Log raw output to stderr so it appears in journalctl
+        import sys
+        print(f"[DEBUG] OpenClaw raw output (first 1000 chars):\n{combined[:1000]}", file=sys.stderr, flush=True)
 
         # Search for the OpenClaw JSON envelope inside the combined output.
         # ANSI-coloured diagnostic lines appear before/after it; we find the object by braces.
@@ -139,6 +143,8 @@ API Spec to check:
         # Extract the text reply from the payload envelope
         payloads = parsed.get("payloads", [])
         reply    = payloads[0].get("text", "") if payloads else ""
+        
+        print(f"[DEBUG] Agent reply text:\n{reply[:1000]}", file=sys.stderr, flush=True)
 
         if not reply:
             return {"success": False, "error": "OpenClaw returned an empty reply payload."}
@@ -149,6 +155,7 @@ API Spec to check:
         if start != -1 and end > start:
             try:
                 findings = json.loads(reply[start:end])
+                print(f"[DEBUG] Parsed {len(findings)} findings", file=sys.stderr, flush=True)
                 return {"success": True, "findings": findings}
             except json.JSONDecodeError:
                 pass
