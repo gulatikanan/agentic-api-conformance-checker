@@ -90,7 +90,22 @@ API Spec to check:
         else:
             ocl_cfg = {}
         
-        # Patch the correct path: agents.defaults.model (confirmed from openclaw.json structure)
+        # Patch the correct path: agents.defaults.model        # Also auto-update the key in OpenClaw's SQLite credential store + clear any cooldown
+        sqlite_db = "/home/ubuntu/.openclaw/agents/main/agent/openclaw-agent.sqlite"
+        if os.path.exists(sqlite_db):
+            try:
+                import sqlite3 as _sqlite3
+                _conn = _sqlite3.connect(sqlite_db)
+                _cur = _conn.cursor()
+                _new_profile = json.dumps({"version":1,"profiles":{"google:default":{"type":"api_key","provider":"google","key":gemini_key}}})
+                _cur.execute("UPDATE auth_profile_store SET store_json = ? WHERE store_key = 'primary'", (_new_profile,))
+                _clean_state = json.dumps({"version":1,"lastGood":{"google":"google:default"},"usageStats":{}})
+                _cur.execute("UPDATE auth_profile_state SET state_json = ? WHERE state_key = 'primary'", (_clean_state,))
+                _conn.commit()
+                _conn.close()
+            except Exception as _e:
+                print(f"[WARN] SQLite key patch failed: {_e}", file=sys.stderr)
+
         ocl_cfg.setdefault("agents", {}).setdefault("defaults", {})["model"] = {
             "primary": "google/gemini-2.5-flash",
             "fallbacks": ["google/gemini-2.5-flash"]
