@@ -20,9 +20,9 @@ module.exports = {
   // 🎭 Cognitive Prompts & Behavioral Rule Injection
   agent: {
     name: 'main',
-    identity: './IDENTITY.md',
-    soul: './SOUL.md',
-    strategy: './AGENTS.md',
+    identity: './src/agent/IDENTITY.md',
+    soul: './src/agent/SOUL.md',
+    strategy: './src/agent/AGENTS.md',
   },
 
   // 🔌 Model Context Protocol (MCP) Dynamic Tool Bridges
