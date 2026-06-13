@@ -19,6 +19,33 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 POSTGRES_URL = os.getenv("POSTGRES_URL")
 OPENCLAW_BIN = "/home/ubuntu/.npm-global/bin/openclaw"
 REPO_DIR     = "/home/ubuntu/agentic-api-conformance-checker"
+# Minimal workspace: OpenClaw --local ingests ALL files in cwd as context.
+# The full repo has uv.lock (378KB ~30k tokens) which blows past Groq's 12k TPM limit.
+# Solution: run OpenClaw from a tiny directory with only the config + agent files.
+AGENT_WORKSPACE = "/home/ubuntu/openclaw-workspace"
+
+def _ensure_agent_workspace():
+    """Create a minimal workspace dir with only the files OpenClaw needs."""
+    import shutil
+    os.makedirs(AGENT_WORKSPACE, exist_ok=True)
+    # Copy openclaw.config.js (tells OpenClaw about MCP server + model)
+    src_cfg = os.path.join(REPO_DIR, "openclaw.config.js")
+    dst_cfg = os.path.join(AGENT_WORKSPACE, "openclaw.config.js")
+    if os.path.exists(src_cfg):
+        shutil.copy2(src_cfg, dst_cfg)
+    # Copy agent identity files
+    agent_dir = os.path.join(AGENT_WORKSPACE, "src", "agent")
+    os.makedirs(agent_dir, exist_ok=True)
+    for fname in ["IDENTITY.md", "SOUL.md", "AGENTS.md"]:
+        src = os.path.join(REPO_DIR, "src", "agent", fname)
+        dst = os.path.join(agent_dir, fname)
+        if os.path.exists(src):
+            shutil.copy2(src, dst)
+    # Copy .env so MCP server can read DB/Qdrant URLs
+    env_src = os.path.join(REPO_DIR, ".env")
+    env_dst = os.path.join(AGENT_WORKSPACE, ".env")
+    if os.path.exists(env_src):
+        shutil.copy2(env_src, env_dst)
 
 class AuditRequest(BaseModel):
     specData: str
@@ -31,6 +58,9 @@ def call_openclaw(spec_data: str) -> dict:
     """
     os.system("rm -rf /home/ubuntu/.openclaw/agents/main/sessions/ && mkdir -p /home/ubuntu/.openclaw/agents/main/sessions/")
     session_id = f"audit_{uuid.uuid4().hex[:8]}"
+
+    # Prepare minimal workspace (only config + agent files, no uv.lock/corpus/docs)
+    _ensure_agent_workspace()
 
     # Single compact prompt — entire audit in one LLM call
     prompt = f"""API conformance check. Do exactly:
@@ -52,7 +82,7 @@ Spec (check ALL endpoints):
             stderr=subprocess.STDOUT,
             text=True,
             timeout=180,
-            cwd=REPO_DIR,
+            cwd=AGENT_WORKSPACE,
         )
         combined = result.stdout.strip()
 

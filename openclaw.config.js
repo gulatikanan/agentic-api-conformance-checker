@@ -29,7 +29,7 @@ module.exports = {
   mcpServers: {
     'compliance-tool-engine': {
       command: 'uv',
-      args: ['run', 'python', '-u', 'src/mcp-server/tools/server.py'],
+      args: ['run', '--project', '/home/ubuntu/agentic-api-conformance-checker', 'python', '-u', '/home/ubuntu/agentic-api-conformance-checker/src/mcp-server/tools/server.py'],
       env: {
         SIMILARITY_THRESHOLD: process.env.SIMILARITY_THRESHOLD || '0.45',
         TRANSFORMERS_OFFLINE: '1',
