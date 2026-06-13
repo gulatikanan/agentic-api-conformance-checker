@@ -14,8 +14,7 @@ The application decouples ingestion, real-time agentic reasoning, tool orchestra
 ## 🛠️ Senior Architecture & Protocol Engineering Decisions
 
 To stabilize execution loops on resource-constrained host infrastructure and guarantee 7-day automated uptime, the following production‑grade optimization layers were implemented:
-* **Systemd High-Availability Daemons:** Both the `api_bridge.py` HTTP server and the OpenClaw daemon are deployed as native `systemd` services (`api-bridge.service` and `openclaw.service`), guaranteeing automatic restarts on crash and surviving hard node reboots to effortlessly meet the 7-day uptime requirement.
-* **Context Window Optimization (413 Prevention):** OpenClaw is configured with a `minimal` tool profile. This strips away bloat (like file editing and generic web search tools) from the background system prompt, reducing the payload size by over 90%. This allows the framework to operate flawlessly on free-tier LLMs (like Groq) without hitting `413 Request too large` errors.
+* **Context Window Optimization:** OpenClaw is configured with a `minimal` tool profile. This strips away baseline framework bloat (like generic file editing tools). To process the remaining context payload securely, the application is strictly paired with high-quota Free-Tier LLMs (like `google/gemini-3.1-pro-preview` with its 1-million token limit) to prevent `429 Quota Exceeded` execution blocking.
 * **Lazy Module Importing & Loading:** Massive ML frameworks (`torch`, `sentence_transformers`) are completely deferred and imported *locally inside the tool boundary function* rather than at the global file scope. This minimizes base process initialization latency from >30 seconds down to **under 50 milliseconds**.
 * **Standard I/O Stream Isolation:** Framework output streams are explicitly redirected to `sys.stderr`. This leaves the primary data channel (`sys.stdout`) 100% pristine for structured JSON‑RPC data packets.
 

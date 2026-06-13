@@ -76,7 +76,7 @@ The verification execution pipeline operates in a live loop when an API specific
 3. **Artifact Inspection**: The OpenClaw agent invokes the MCP server's `inspect_artifact` tool boundary to flatten the endpoint schemas, parameters, and structural design signatures.
 4. **Rule Matching**: The agent identifies structural security topics and requests compliance context by calling the MCP server's `find_rules` tool.
 5. **RAG Retrieval**: The MCP server computes vector dimensions of the search query locally, runs a cosine distance lookup against Qdrant, and relays matching clauses and similarity scores back across the protocol boundary to OpenClaw.
-6. **Verdict Formulation**: The OpenClaw engine weighs the custom system instructions (`SOUL.md`) alongside the rules using the native Google Gemini API (`gemini-1.5-pro`).
+6. **Verdict Formulation**: The OpenClaw engine weighs the custom system instructions (`SOUL.md`) alongside the rules using the native Google Gemini API (`gemini-3.1-pro-preview`).
 7. **Report Persistence**: The agent compiles audit assertions into a structured findings object, writes outcomes to the PostgreSQL relational database via the `save_conformance_check` tool, and flushes real-time data straight to the web interface.
 
 ## 3. Component Descriptions
