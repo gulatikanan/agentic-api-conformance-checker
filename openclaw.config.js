@@ -9,7 +9,7 @@ module.exports = {
   // 🧠 Upstream AI Inference Router Configuration
   llm: {
     provider: process.env.LLM_PROVIDER || 'gemini',
-    model: process.env.GEMINI_MODEL || 'google/gemini-1.5-pro',
+    model: process.env.GEMINI_MODEL || 'google/gemini-3.1-pro-preview',
     apiKey: process.env.GEMINI_API_KEY,
     options: {
       temperature: 0.1, // Low temperature ensures strict, objective architectural evaluations
