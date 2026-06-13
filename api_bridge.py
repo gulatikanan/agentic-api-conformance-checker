@@ -45,7 +45,7 @@ Spec (check ALL endpoints):
     try:
         result = subprocess.run(
             [OPENCLAW_BIN, "agent", "--agent", "main", "--local",
-             "--model", "google/gemini-2.5-flash",
+             "--model", "groq/llama-3.3-70b-versatile",
              "--session-id", session_id,
              "--message", prompt, "--json"],
             stdout=subprocess.PIPE,
